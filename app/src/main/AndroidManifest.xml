@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <application
+        android:icon="@drawable/vich_avatar"
+        android:roundIcon="@drawable/vich_avatar"
         android:allowBackup="true"
         android:label="Vich"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
