@@ -41,10 +41,30 @@ public class FloatingService extends Service {
     private GradientDrawable shape(int color,float radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
 
     @Override public int onStartCommand(Intent intent,int flags,int startId){
+        if(intent!=null && "com.vich.assistant.EXECUTE_COMMAND".equals(intent.getAction())){
+            String command=intent.getStringExtra("command");
+            if(panel==null) { activeTab="commands"; showPanel(); }
+            else showTab("commands");
+            final String spoken=command==null?"":command;
+            content.post(()->{ if("commands".equals(activeTab)) runCommand(spoken, findCommandResult()); });
+            return START_STICKY;
+        }
         String tab=intent==null?null:intent.getStringExtra("tab");
         if(tab!=null)activeTab=tab;
         if(panel==null)showPanel();else showTab(activeTab);
         return START_STICKY;
+    }
+    private TextView findCommandResult(){
+        if(content==null)return text("",13,Color.LTGRAY);
+        return findResultIn(content);
+    }
+    private TextView findResultIn(android.view.ViewGroup group){
+        for(int i=0;i<group.getChildCount();i++){
+            View v=group.getChildAt(i);
+            if(v instanceof TextView && "vich_command_result".equals(v.getTag()))return (TextView)v;
+            if(v instanceof android.view.ViewGroup){TextView found=findResultIn((android.view.ViewGroup)v);if(found!=null)return found;}
+        }
+        return text("Команда получена",13,Color.LTGRAY);
     }
     private void showPanel(){
         wm=(WindowManager)getSystemService(WINDOW_SERVICE); sw=getResources().getDisplayMetrics().widthPixels; sh=getResources().getDisplayMetrics().heightPixels;
@@ -122,14 +142,20 @@ public class FloatingService extends Service {
             if(count==0)results.addView(text(apps.isEmpty()?"Список приложений недоступен":"Ничего не найдено",14,Color.LTGRAY));};
         render.run();search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int a){}public void onTextChanged(CharSequence s,int st,int before,int count){render.run();}public void afterTextChanged(Editable e){}});
     }
+    private boolean launchMatching(String[] words){
+        for(String[] app:getApps())for(String word:words)if(app[1].toLowerCase(new Locale("ru")).contains(word)||app[0].toLowerCase(Locale.ROOT).contains(word)){openApp(app[0],app[1]);return true;}
+        return false;
+    }
     private void openApp(String pkg,String label){try{Intent i=getPackageManager().getLaunchIntentForPackage(pkg);if(i!=null){i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(i);}else Toast.makeText(this,"Нет команды запуска для "+label,Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,"Не удалось открыть "+label,Toast.LENGTH_SHORT).show();}}
     private void showCommands(){
         LinearLayout box=column();box.addView(text("Скажи помощнику, что сделать",20,Color.WHITE));
         box.addView(text("Примеры: открой YouTube • открой Telegram • найди погоду в Париже • открой настройки Wi-Fi • открой браузер",13,Color.LTGRAY));
         EditText command=new EditText(this);command.setHint("Введи команду…");command.setTextColor(Color.WHITE);command.setHintTextColor(Color.LTGRAY);command.setSingleLine(true);command.setBackground(shape(bg,10));command.setPadding(dp(12),0,dp(12),0);
         LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,dp(48));cp.topMargin=dp(12);box.addView(command,cp);
-        TextView result=text("Команды выполняются на устройстве; для запуска приложения оно должно быть установлено.",13,Color.LTGRAY);result.setPadding(0,dp(12),0,dp(12));box.addView(result);
+        TextView result=text("Команды выполняются на устройстве; для запуска приложения оно должно быть установлено.",13,Color.LTGRAY);result.setTag("vich_command_result");result.setPadding(0,dp(12),0,dp(12));box.addView(result);
         box.addView(btn("Выполнить команду",()->runCommand(command.getText().toString(),result)));
+        LinearLayout.LayoutParams voiceLp=new LinearLayout.LayoutParams(-1,dp(44));voiceLp.topMargin=dp(7);
+        box.addView(btn("🎙 Сказать команду голосом",()->{try{startActivity(new Intent(this,VoiceCommandActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Exception e){result.setText("Голосовой ввод недоступен на устройстве.");}}),voiceLp);
         String[] examples={"Открой YouTube","Открой настройки Wi-Fi","Найди погоду","Открой браузер","Открой Bluetooth"};
         for(String ex:examples){TextView e=btn("↗  "+ex,()->{command.setText(ex);runCommand(ex,result);});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(40));lp.topMargin=dp(7);box.addView(e,lp);}
         content.addView(new ScrollView(this){{addView(box);}},new FrameLayout.LayoutParams(-1,-1));
@@ -137,7 +163,11 @@ public class FloatingService extends Service {
     private void runCommand(String raw,TextView result){
         String q=raw==null?"":raw.trim();String l=q.toLowerCase(new Locale("ru"));
         if(q.isEmpty()){result.setText("Сначала введи команду.");return;}
-        if(l.contains("настрой")&&l.contains("wi")){openSettings(new Intent(Settings.ACTION_WIFI_SETTINGS),result,"Открываю настройки Wi-Fi");return;}
+        if(l.contains("настрой")&&(l.contains("wi")||l.contains("вай"))){openSettings(new Intent(Settings.ACTION_WIFI_SETTINGS),result,"Открываю настройки Wi-Fi");return;}
+        if(l.contains("камер")){if(!launchMatching(new String[]{"камера","camera"})){result.setText("Камера не найдена среди приложений.");}return;}
+        if(l.contains("калькулятор")||l.contains("калькуля")){if(!launchMatching(new String[]{"калькулятор","calculator"})){result.setText("Калькулятор не найден среди приложений.");}return;}
+        if(l.contains("карты")||l.contains("навиг")){if(!launchMatching(new String[]{"карты","maps","google maps"})){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+URLEncoder.encode(q,"UTF-8"))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Exception e){result.setText("Карты недоступны.");}}return;}
+        if(l.contains("позвони")||l.contains("телефон")||l.contains("набор номера")){try{startActivity(new Intent(Intent.ACTION_DIAL).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));result.setText("Открываю приложение телефона.");}catch(Exception e){result.setText("Приложение телефона недоступно.");}return;}
         if(l.contains("bluetooth")||l.contains("блютуз")){openSettings(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS),result,"Открываю настройки Bluetooth");return;}
         if(l.contains("звук")||l.contains("громк")){openSettings(new Intent(Settings.ACTION_SOUND_SETTINGS),result,"Открываю настройки звука");return;}
         if(l.contains("настрой")){openSettings(new Intent(Settings.ACTION_SETTINGS),result,"Открываю настройки Android");return;}
