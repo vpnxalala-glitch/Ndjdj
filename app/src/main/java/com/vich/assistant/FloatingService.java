@@ -1,0 +1,191 @@
+package com.vich.assistant;
+
+import android.app.Service;
+import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.PixelFormat;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Build;
+import android.os.IBinder;
+import android.provider.Settings;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.webkit.WebChromeClient;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+import android.text.TextWatcher;
+import android.text.Editable;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+
+public class FloatingService extends Service {
+    private WindowManager wm; private View panel; private WindowManager.LayoutParams params;
+    private FrameLayout content; private WebView web; private int sw,sh; private float lastX,lastY,downX,downY;
+    private String activeTab="menu";
+    private final int bg=Color.rgb(17,23,39), surface=Color.rgb(31,41,61), accent=Color.rgb(35,190,170);
+    private int dp(float n){return (int)(n*getResources().getDisplayMetrics().density);}
+    private GradientDrawable shape(int color,float radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
+
+    @Override public int onStartCommand(Intent intent,int flags,int startId){
+        String tab=intent==null?null:intent.getStringExtra("tab");
+        if(tab!=null)activeTab=tab;
+        if(panel==null)showPanel();else showTab(activeTab);
+        return START_STICKY;
+    }
+    private void showPanel(){
+        wm=(WindowManager)getSystemService(WINDOW_SERVICE); sw=getResources().getDisplayMetrics().widthPixels; sh=getResources().getDisplayMetrics().heightPixels;
+        params=new WindowManager.LayoutParams((int)(sw*.92f),(int)(sh*.76f),Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE,
+          WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
+        params.gravity=Gravity.TOP|Gravity.START;params.x=(sw-params.width)/2;params.y=sh/10;params.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(8),dp(8),dp(8),dp(6));root.setBackground(shape(bg,22));
+        LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(dp(10),dp(3),dp(3),dp(3));head.setBackground(shape(surface,14));
+        TextView brand=text("VICH • МЕНЮ",15,Color.WHITE);brand.setTypeface(null,Typeface.BOLD);head.addView(brand,new LinearLayout.LayoutParams(0,dp(42),1));
+        head.addView(btn("⌂",()->showTab("menu")),new LinearLayout.LayoutParams(dp(42),dp(42)));
+        head.addView(btn("—",()->collapse()),new LinearLayout.LayoutParams(dp(42),dp(42)));
+        head.addView(btn("×",()->stopSelf()),new LinearLayout.LayoutParams(dp(42),dp(42)));head.setOnTouchListener(this::drag);
+        LinearLayout nav=new LinearLayout(this);nav.setGravity(Gravity.CENTER);
+        String[][] tabs={{"Меню","menu"},{"ИИ","ai"},{"Команды","commands"},{"Приложения","apps"},{"Веб","browser"}};
+        for(String[] t:tabs){TextView b=btn(t[0],()->showTab(t[1]));nav.addView(b,new LinearLayout.LayoutParams(0,dp(42),1));}
+        content=new FrameLayout(this);content.setBackground(shape(surface,14));content.setClipToOutline(true);
+        root.addView(head);root.addView(nav,new LinearLayout.LayoutParams(-1,dp(46)));root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
+        TextView hint=text("Перетаскивай за заголовок • сверни в пузырёк кнопкой —",11,Color.LTGRAY);hint.setGravity(Gravity.CENTER);root.addView(hint,new LinearLayout.LayoutParams(-1,dp(24)));
+        panel=root;wm.addView(panel,params);showTab(activeTab);
+    }
+    private TextView text(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);return t;}
+    private TextView btn(String s,Runnable action){TextView t=text(s,13,Color.WHITE);t.setGravity(Gravity.CENTER);t.setPadding(dp(4),dp(4),dp(4),dp(4));t.setBackground(shape(surface,11));t.setOnClickListener(v->action.run());return t;}
+    private void showTab(String tab){
+        activeTab=tab;if(web!=null){try{web.stopLoading();web.destroy();}catch(Exception ignored){}web=null;}
+        if(content==null)return;content.removeAllViews();
+        if("menu".equals(tab))showMenu();else if("ai".equals(tab))showWeb(true);else if("browser".equals(tab))showWeb(false);else if("apps".equals(tab))showApps();else if("commands".equals(tab))showCommands();else showTools();
+    }
+    private void showMenu(){
+        LinearLayout list=column();list.addView(text("Чем займёмся?",24,Color.WHITE));list.addView(text("Выбери функцию — браузер сам не откроется.",14,Color.LTGRAY));
+        addMenuCard(list,"🤖 ИИ-ассистент","Задать вопрос через ChatGPT","ai");
+        addMenuCard(list,"🎯 Командный помощник","Напиши «открой YouTube» или «найди рецепт»","commands");
+        addMenuCard(list,"📱 Запуск приложений","Поиск установленных приложений","apps");
+        addMenuCard(list,"🌐 Браузер","Сайты и поиск","browser");
+        addMenuCard(list,"🧰 Быстрые настройки","Wi-Fi, Bluetooth, звук и настройки Android","tools");
+        content.addView(new ScrollView(this){{addView(list);}},new FrameLayout.LayoutParams(-1,-1));
+    }
+    private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(dp(12),dp(12),dp(12),dp(12));return l;}
+    private void addMenuCard(LinearLayout parent,String title,String desc,String tab){
+        LinearLayout c=column();c.setBackground(shape(bg,13));TextView h=text(title,17,Color.WHITE);h.setTypeface(null,Typeface.BOLD);c.addView(h);
+        TextView d=text(desc,13,Color.LTGRAY);d.setPadding(0,dp(5),0,dp(8));c.addView(d);c.setOnClickListener(v->showTab(tab));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(10);parent.addView(c,lp);
+    }
+    private void showWeb(boolean ai){
+        LinearLayout box=column();LinearLayout row=new LinearLayout(this);
+        EditText input=new EditText(this);input.setSingleLine(true);input.setTextColor(Color.WHITE);input.setHintTextColor(Color.LTGRAY);input.setTextSize(14);
+        input.setHint(ai?"Задай вопрос ИИ":"Адрес сайта или поисковый запрос");input.setBackground(shape(bg,10));input.setPadding(dp(10),0,dp(10),0);
+        row.addView(input,new LinearLayout.LayoutParams(0,dp(46),1));
+        row.addView(btn(ai?"Спросить":"Открыть",()->navigate(input.getText().toString(),ai)),new LinearLayout.LayoutParams(dp(82),dp(46)));box.addView(row);
+        web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);web.setWebViewClient(new WebViewClient());web.setWebChromeClient(new WebChromeClient());web.setBackgroundColor(Color.WHITE);
+        box.addView(web,new LinearLayout.LayoutParams(-1,0,1));content.addView(box,new FrameLayout.LayoutParams(-1,-1));
+        input.setOnEditorActionListener((v,id,event)->{if(id==EditorInfo.IME_ACTION_GO||id==EditorInfo.IME_ACTION_DONE){navigate(input.getText().toString(),ai);return true;}return false;});
+        if(ai){input.setText("https://chatgpt.com");web.loadUrl("https://chatgpt.com");}else web.loadUrl("https://www.google.com");
+    }
+    private void navigate(String raw,boolean ai){
+        String q=raw==null?"":raw.trim();if(q.isEmpty())return;
+        try{String url;if(q.startsWith("https://")||q.startsWith("http://"))url=q;
+        else if(q.matches("(?i)^[a-z0-9.-]+\\.[a-z]{2,}(/.*)?$"))url="https://"+q;
+        else url=(ai?"https://chatgpt.com/?q=":"https://www.google.com/search?q=")+URLEncoder.encode(q,"UTF-8");
+        if(web!=null)web.loadUrl(url);else startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        }catch(Exception e){Toast.makeText(this,"Не удалось открыть запрос",Toast.LENGTH_SHORT).show();}
+    }
+    private List<String[]> getApps(){
+        List<String[]> apps=new ArrayList<>();
+        try{for(android.content.pm.ApplicationInfo a:getPackageManager().getInstalledApplications(0)){
+            Intent launch=getPackageManager().getLaunchIntentForPackage(a.packageName);
+            if(launch!=null&&!a.packageName.equals(getPackageName()))apps.add(new String[]{a.packageName,getPackageManager().getApplicationLabel(a).toString()});
+        }}catch(Exception ignored){}
+        Collections.sort(apps,(a,b)->a[1].compareToIgnoreCase(b[1]));return apps;
+    }
+    private void showApps(){
+        LinearLayout box=column();EditText search=new EditText(this);search.setSingleLine(true);search.setHint("Название приложения…");search.setTextColor(Color.WHITE);search.setHintTextColor(Color.LTGRAY);search.setBackground(shape(bg,10));box.addView(search,new LinearLayout.LayoutParams(-1,dp(46)));
+        LinearLayout results=new LinearLayout(this);results.setOrientation(LinearLayout.VERTICAL);ScrollView scroll=new ScrollView(this);scroll.addView(results);box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));content.addView(box,new FrameLayout.LayoutParams(-1,-1));
+        List<String[]> apps=getApps();Runnable render=()->{results.removeAllViews();String q=search.getText().toString().toLowerCase(Locale.ROOT);int count=0;
+            for(String[] a:apps)if(a[1].toLowerCase(Locale.ROOT).contains(q)||a[0].toLowerCase(Locale.ROOT).contains(q)){TextView item=text("📲  "+a[1]+"\n"+a[0],14,Color.WHITE);item.setPadding(dp(12),dp(12),dp(8),dp(12));item.setBackground(shape(bg,10));item.setOnClickListener(v->openApp(a[0],a[1]));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(5);results.addView(item,lp);if(++count>=100)break;}
+            if(count==0)results.addView(text(apps.isEmpty()?"Список приложений недоступен":"Ничего не найдено",14,Color.LTGRAY));};
+        render.run();search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int a){}public void onTextChanged(CharSequence s,int st,int before,int count){render.run();}public void afterTextChanged(Editable e){}});
+    }
+    private void openApp(String pkg,String label){try{Intent i=getPackageManager().getLaunchIntentForPackage(pkg);if(i!=null){i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(i);}else Toast.makeText(this,"Нет команды запуска для "+label,Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,"Не удалось открыть "+label,Toast.LENGTH_SHORT).show();}}
+    private void showCommands(){
+        LinearLayout box=column();box.addView(text("Скажи помощнику, что сделать",20,Color.WHITE));
+        box.addView(text("Примеры: открой YouTube • открой Telegram • найди погоду в Париже • открой настройки Wi-Fi • открой браузер",13,Color.LTGRAY));
+        EditText command=new EditText(this);command.setHint("Введи команду…");command.setTextColor(Color.WHITE);command.setHintTextColor(Color.LTGRAY);command.setSingleLine(true);command.setBackground(shape(bg,10));command.setPadding(dp(12),0,dp(12),0);
+        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,dp(48));cp.topMargin=dp(12);box.addView(command,cp);
+        TextView result=text("Команды выполняются на устройстве; для запуска приложения оно должно быть установлено.",13,Color.LTGRAY);result.setPadding(0,dp(12),0,dp(12));box.addView(result);
+        box.addView(btn("Выполнить команду",()->runCommand(command.getText().toString(),result)));
+        String[] examples={"Открой YouTube","Открой настройки Wi-Fi","Найди погоду","Открой браузер","Открой Bluetooth"};
+        for(String ex:examples){TextView e=btn("↗  "+ex,()->{command.setText(ex);runCommand(ex,result);});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(40));lp.topMargin=dp(7);box.addView(e,lp);}
+        content.addView(new ScrollView(this){{addView(box);}},new FrameLayout.LayoutParams(-1,-1));
+    }
+    private void runCommand(String raw,TextView result){
+        String q=raw==null?"":raw.trim();String l=q.toLowerCase(new Locale("ru"));
+        if(q.isEmpty()){result.setText("Сначала введи команду.");return;}
+        if(l.contains("настрой")&&l.contains("wi")){openSettings(new Intent(Settings.ACTION_WIFI_SETTINGS),result,"Открываю настройки Wi-Fi");return;}
+        if(l.contains("bluetooth")||l.contains("блютуз")){openSettings(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS),result,"Открываю настройки Bluetooth");return;}
+        if(l.contains("звук")||l.contains("громк")){openSettings(new Intent(Settings.ACTION_SOUND_SETTINGS),result,"Открываю настройки звука");return;}
+        if(l.contains("настрой")){openSettings(new Intent(Settings.ACTION_SETTINGS),result,"Открываю настройки Android");return;}
+        if(l.contains("браузер")||l.contains("интернет")){showTab("browser");return;}
+        if(l.equals("меню")||l.contains("главное меню")){showTab("menu");return;}
+        if(l.contains("ии")||l.contains("чатгпт")||l.contains("chatgpt")){showTab("ai");return;}
+        if(l.startsWith("найди ")||l.startsWith("поищи ")||l.startsWith("поиск ")){String term=q.replaceFirst("(?i)^(найди|поищи|поиск)\\s*","");showTab("browser");navigate(term,false);return;}
+        String target=q.replaceFirst("(?i)^(пожалуйста\\s+)?(открой|запусти|включи|открыть|запустить)\\s+","").trim();
+        if(target.equalsIgnoreCase(q)){target=q;}
+        if(target.isEmpty()){result.setText("Напиши, например: «открой YouTube» или «найди погоду».");return;}
+        List<String[]> apps=getApps();String t=target.toLowerCase(new Locale("ru"));
+        for(String[] a:apps){String label=a[1].toLowerCase(new Locale("ru"));String pkg=a[0].toLowerCase(Locale.ROOT);
+            if(label.equals(t)||pkg.equals(t)||pkg.endsWith("."+t)||label.contains(t)){openApp(a[0],a[1]);result.setText("Запускаю "+a[1]);return;}}
+        showTab("browser");navigate(target,false);Toast.makeText(this,"Приложение не найдено — ищу в интернете",Toast.LENGTH_LONG).show();
+    }
+    private void openSettings(Intent i,TextView result,String message){try{i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(i);result.setText(message);}catch(Exception e){result.setText("Не удалось открыть системные настройки.");}}
+    private void showTools(){
+        LinearLayout box=column();box.addView(text("Быстрые инструменты Android",20,Color.WHITE));
+        addTool(box,"Wi-Fi","Открыть настройки Wi-Fi",Settings.ACTION_WIFI_SETTINGS);
+        addTool(box,"Bluetooth","Открыть настройки Bluetooth",Settings.ACTION_BLUETOOTH_SETTINGS);
+        addTool(box,"Звук","Громкость и режим звука",Settings.ACTION_SOUND_SETTINGS);
+        addTool(box,"Дисплей","Яркость и экран",Settings.ACTION_DISPLAY_SETTINGS);
+        addTool(box,"Приложения","Управление приложениями",Settings.ACTION_APPLICATION_SETTINGS);
+        addTool(box,"Все настройки","Системные настройки",Settings.ACTION_SETTINGS);
+        content.addView(new ScrollView(this){{addView(box);}},new FrameLayout.LayoutParams(-1,-1));
+    }
+    private void addTool(LinearLayout box,String title,String desc,String action){
+        LinearLayout c=column();c.setBackground(shape(bg,12));c.addView(text(title,16,Color.WHITE));c.addView(text(desc,12,Color.LTGRAY));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(7);box.addView(c,lp);c.setOnClickListener(v->{try{startActivity(new Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Exception e){Toast.makeText(this,"Недоступно на этом устройстве",Toast.LENGTH_SHORT).show();}});
+    }
+    private boolean drag(View v,MotionEvent e){
+        if(e.getAction()==MotionEvent.ACTION_DOWN){lastX=e.getRawX();lastY=e.getRawY();return true;}
+        if(e.getAction()==MotionEvent.ACTION_MOVE){params.x+=(int)(e.getRawX()-lastX);params.y+=(int)(e.getRawY()-lastY);lastX=e.getRawX();lastY=e.getRawY();update();return true;}
+        return e.getAction()==MotionEvent.ACTION_UP;
+    }
+    private void update(){try{if(panel!=null)wm.updateViewLayout(panel,params);}catch(Exception ignored){}}
+    private void collapse(){
+        if(panel!=null)try{wm.removeView(panel);}catch(Exception ignored){}
+        if(web!=null){web.destroy();web=null;}
+        TextView bubble=text("V",22,Color.WHITE);bubble.setGravity(Gravity.CENTER);bubble.setTypeface(null,Typeface.BOLD);bubble.setBackground(shape(accent,50));
+        params.width=dp(58);params.height=dp(58);params.x=dp(18);params.y=dp(220);
+        bubble.setOnTouchListener((v,e)->{switch(e.getAction()){
+            case MotionEvent.ACTION_DOWN:downX=e.getRawX();downY=e.getRawY();lastX=downX;lastY=downY;return true;
+            case MotionEvent.ACTION_MOVE:params.x+=(int)(e.getRawX()-lastX);params.y+=(int)(e.getRawY()-lastY);lastX=e.getRawX();lastY=e.getRawY();update();return true;
+            case MotionEvent.ACTION_UP:if(Math.abs(e.getRawX()-downX)<dp(8)&&Math.abs(e.getRawY()-downY)<dp(8)){try{wm.removeView(v);}catch(Exception ignored){}panel=null;activeTab="menu";showPanel();}return true;
+        }return true;});
+        panel=bubble;wm.addView(panel,params);
+    }
+    @Override public void onDestroy(){if(web!=null){try{web.stopLoading();web.destroy();}catch(Exception ignored){}}try{if(panel!=null)wm.removeView(panel);}catch(Exception ignored){}panel=null;super.onDestroy();}
+    @Override public IBinder onBind(Intent intent){return null;}
+}
