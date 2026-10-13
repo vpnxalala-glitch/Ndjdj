@@ -156,7 +156,7 @@ public class FloatingService extends Service {
         box.addView(btn("Выполнить команду",()->runCommand(command.getText().toString(),result)));
         LinearLayout.LayoutParams voiceLp=new LinearLayout.LayoutParams(-1,dp(44));voiceLp.topMargin=dp(7);
         box.addView(btn("🎙 Сказать команду голосом",()->{try{startActivity(new Intent(this,VoiceCommandActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Exception e){result.setText("Голосовой ввод недоступен на устройстве.");}}),voiceLp);
-        String[] examples={"Открой YouTube","Открой настройки Wi-Fi","Найди погоду","Открой браузер","Открой Bluetooth"};
+        String[] examples={"Открой YouTube","Открой настройки Wi-Fi","Найди погоду","Открой Bluetooth","Открой будильник","Открой календарь","Открой местоположение"};
         for(String ex:examples){TextView e=btn("↗  "+ex,()->{command.setText(ex);runCommand(ex,result);});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(40));lp.topMargin=dp(7);box.addView(e,lp);}
         content.addView(new ScrollView(this){{addView(box);}},new FrameLayout.LayoutParams(-1,-1));
     }
@@ -168,6 +168,11 @@ public class FloatingService extends Service {
         if(l.contains("калькулятор")||l.contains("калькуля")){if(!launchMatching(new String[]{"калькулятор","calculator"})){result.setText("Калькулятор не найден среди приложений.");}return;}
         if(l.contains("карты")||l.contains("навиг")){if(!launchMatching(new String[]{"карты","maps","google maps"})){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+URLEncoder.encode(q,"UTF-8"))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Exception e){result.setText("Карты недоступны.");}}return;}
         if(l.contains("позвони")||l.contains("телефон")||l.contains("набор номера")){try{startActivity(new Intent(Intent.ACTION_DIAL).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));result.setText("Открываю приложение телефона.");}catch(Exception e){result.setText("Приложение телефона недоступно.");}return;}
+        if(l.contains("будильник")||l.contains("поставь будильник")||l.contains("установи будильник")){try{startActivity(new Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));result.setText("Открываю будильники. Время можно подтвердить в приложении часов.");}catch(Exception e){result.setText("Приложение часов недоступно.");}return;}
+        if(l.contains("календар")){try{startActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));result.setText("Открываю календарь.");}catch(Exception e){result.setText("Календарь не найден.");}return;}
+        if(l.contains("загрузк")||l.contains("скачан")){try{startActivity(new Intent(android.provider.DocumentsContract.ACTION_DOCUMENTS_PROVIDER).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Exception e){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("content://downloads/my_downloads")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Exception ignored){result.setText("Открой приложение «Файлы», чтобы посмотреть загрузки.");}}return;}
+        if(l.contains("местополож")||l.contains("геолокац")||l.contains("gps")){openSettings(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS),result,"Открываю настройки местоположения");return;}
+        if(l.contains("приложен")&&l.contains("настрой")){openSettings(new Intent(Settings.ACTION_APPLICATION_SETTINGS),result,"Открываю настройки приложений");return;}
         if(l.contains("bluetooth")||l.contains("блютуз")){openSettings(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS),result,"Открываю настройки Bluetooth");return;}
         if(l.contains("звук")||l.contains("громк")){openSettings(new Intent(Settings.ACTION_SOUND_SETTINGS),result,"Открываю настройки звука");return;}
         if(l.contains("настрой")){openSettings(new Intent(Settings.ACTION_SETTINGS),result,"Открываю настройки Android");return;}
