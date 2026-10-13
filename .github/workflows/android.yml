@@ -3,6 +3,8 @@ name: Build APK and publish release
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -30,7 +32,7 @@ jobs:
           log-accepted-android-sdk-licenses: 'false'
 
       - name: Install Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.9'
 
@@ -41,7 +43,7 @@ jobs:
           sdkmanager --list_installed
 
       - name: Build APK
-        run: gradle --no-daemon --stacktrace --info assembleDebug
+        run: gradle --no-daemon --stacktrace --warning-mode all assembleDebug
 
       - name: Upload build diagnostics and APK
         if: always()
