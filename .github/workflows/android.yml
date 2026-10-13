@@ -27,27 +27,39 @@ jobs:
 
       - name: Accept Android SDK licenses
         shell: bash
-        run: yes | sdkmanager --licenses || true
+        run: |
+          set +o pipefail
+          yes | sdkmanager --licenses
 
       - name: Install required Android SDK packages
-        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+        shell: bash
+        run: |
+          sdkmanager --update
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Install Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Build APK
-        run: gradle --no-daemon --stacktrace assembleDebug
+      - name: Print build environment
+        run: |
+          java -version
+          gradle --version
+          sdkmanager --list_installed
 
-      - name: Upload APK artifact
+      - name: Build APK
+        run: gradle --no-daemon --stacktrace --info assembleDebug
+
+      - name: Upload build diagnostics and APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Vich-debug-apk
+          name: Vich-build-diagnostics
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/reports/
+            app/build/outputs/logs/
           if-no-files-found: warn
           retention-days: 14
 
