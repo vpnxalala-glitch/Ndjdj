@@ -93,7 +93,7 @@ public class FloatingService extends Service {
     private void showTab(String tab){
         activeTab=tab;if(web!=null){try{web.stopLoading();web.destroy();}catch(Exception ignored){}web=null;}
         if(content==null)return;content.removeAllViews();
-        if("menu".equals(tab))showMenu();else if("sizes".equals(tab))showSizes();else if("ai".equals(tab))showWeb(true);else if("browser".equals(tab))showWeb(false);else if("apps".equals(tab))showApps();else if("commands".equals(tab))showCommands();else showTools();
+        if("menu".equals(tab))showMenu();else if("sizes".equals(tab))showSizes();else if("osint".equals(tab))showOpenSearch();else if("ai".equals(tab))showWeb(true);else if("browser".equals(tab))showWeb(false);else if("apps".equals(tab))showApps();else if("commands".equals(tab))showCommands();else showTools();
     }
     private void showMenu(){
         LinearLayout list=column();list.addView(text("Чем займёмся?",24,Color.WHITE));list.addView(text("Выбери функцию — браузер сам не откроется.",14,Color.LTGRAY));
@@ -103,6 +103,7 @@ public class FloatingService extends Service {
         addMenuCard(list,"🌐 Браузер","Сайты и поиск","browser");
         addMenuCard(list,"🧰 Быстрые настройки","Wi-Fi, Bluetooth, звук и настройки Android","tools");
         addMenuCard(list,"📐 Размеры пузыря и окна","Настрой ширину и высоту окна, размер плавающего пузыря","sizes");
+        addMenuCard(list,"🔎 Поиск по открытым источникам","Публичные ссылки и сведения по Telegram username или номеру","osint");
         content.addView(new ScrollView(this){{addView(list);}},new FrameLayout.LayoutParams(-1,-1));
     }
     private void showSizes(){
@@ -118,6 +119,36 @@ public class FloatingService extends Service {
             Toast.makeText(this,"Размеры сохранены",Toast.LENGTH_SHORT).show();
         }));
         content.addView(new ScrollView(this){{addView(box);}},new FrameLayout.LayoutParams(-1,-1));
+    }
+    private void showOpenSearch(){
+        LinearLayout box=column();
+        box.addView(text("Поиск по открытым источникам",21,Color.WHITE));
+        box.addView(text("Введи @username, ссылку t.me или номер. Здесь показываются публичные ссылки и инструкции проверки; закрытые данные не извлекаются.",13,Color.LTGRAY));
+        EditText input=new EditText(this);input.setSingleLine(true);input.setTextColor(Color.WHITE);input.setHintTextColor(Color.LTGRAY);input.setHint("@username, t.me/... или номер");input.setBackground(shape(bg,10));input.setPadding(dp(10),0,dp(10),0);
+        LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(-1,dp(48));ip.topMargin=dp(12);box.addView(input,ip);
+        TextView result=text("Результаты появятся здесь.",13,Color.WHITE);result.setPadding(0,dp(12),0,dp(12));box.addView(result);
+        box.addView(btn("Найти публичные источники",()->{
+            String q=input.getText().toString().trim();
+            if(q.isEmpty()){result.setText("Сначала введи username, ссылку или номер.");return;}
+            String clean=q.startsWith("@")?q.substring(1):q;
+            if(clean.matches("[A-Za-z0-9_]{5,32}")){
+                String profile="https://t.me/"+clean;
+                result.setText("Telegram username: @"+clean+"\nПубличная ссылка: "+profile+"\n\nЧисловой Telegram ID нельзя надёжно определить только по username через обычную публичную ссылку. Для получения ID используй Telegram API в разрешённом контексте.\n\nДополнительный поиск по точному username:");
+                addSearchLink(box,"Искать точный username в интернете","https://www.google.com/search?q="+Uri.encode("\""+q+"\""));
+                addSearchLink(box,"Поиск публичных упоминаний в GitHub","https://github.com/search?q="+Uri.encode(q)+"&type=users");
+            }else if(q.matches("(?i)https?://t\\.me/[^\\s]+")){
+                result.setText("Ссылка на публичный Telegram-профиль/канал:\n"+q+"\n\nОткрой профиль и проверь доступную публичную информацию. Username может измениться, а ссылка не подтверждает личность владельца.");
+                addSearchLink(box,"Искать ссылку в интернете","https://www.google.com/search?q="+Uri.encode("\""+q+"\""));
+            }else{
+                result.setText("Номер для проверки: "+q+"\nПоиск по номеру не раскрывает гарантированно владельца или его Telegram ID. Используй публичные результаты и сверяй совпадения вручную.");
+                addSearchLink(box,"Искать точный номер в интернете","https://www.google.com/search?q="+Uri.encode("\""+q+"\""));
+            }
+        }));
+        content.addView(new ScrollView(this){{addView(box);}},new FrameLayout.LayoutParams(-1,-1));
+    }
+    private void addSearchLink(LinearLayout box,String title,String url){
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(42));lp.topMargin=dp(6);
+        box.addView(btn(title,()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Exception e){Toast.makeText(this,"Не удалось открыть ссылку",Toast.LENGTH_SHORT).show();}}),lp);
     }
     private interface IntSetter{void set(int value);}
     private void addSizeControl(LinearLayout parent,String title,int min,int max,int initial,String key,String unit,IntSetter setter){
