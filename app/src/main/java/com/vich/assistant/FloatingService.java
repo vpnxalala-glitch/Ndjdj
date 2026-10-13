@@ -56,7 +56,7 @@ public class FloatingService extends Service {
     }
     private TextView findCommandResult(){
         if(content==null)return text("",13,Color.LTGRAY);
-        return findResultIn(content);
+        TextView result=findResultIn(content);return result==null?text("Команда получена",13,Color.LTGRAY):result;
     }
     private TextView findResultIn(android.view.ViewGroup group){
         for(int i=0;i<group.getChildCount();i++){
@@ -64,7 +64,7 @@ public class FloatingService extends Service {
             if(v instanceof TextView && "vich_command_result".equals(v.getTag()))return (TextView)v;
             if(v instanceof android.view.ViewGroup){TextView found=findResultIn((android.view.ViewGroup)v);if(found!=null)return found;}
         }
-        return text("Команда получена",13,Color.LTGRAY);
+        return null;
     }
     private void showPanel(){
         wm=(WindowManager)getSystemService(WINDOW_SERVICE); sw=getResources().getDisplayMetrics().widthPixels; sh=getResources().getDisplayMetrics().heightPixels;
