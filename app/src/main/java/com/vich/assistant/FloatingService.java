@@ -74,7 +74,7 @@ public class FloatingService extends Service {
         params=new WindowManager.LayoutParams((int)(sw*panelWidthPct/100f),(int)(sh*panelHeightPct/100f),Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE,
           WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
         params.gravity=Gravity.TOP|Gravity.START;params.x=(sw-params.width)/2;params.y=sh/10;params.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
-        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(8),dp(8),dp(8),dp(6));root.setBackground(shape(bg,22));
+        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(8),dp(8),dp(8),dp(6));root.setBackground(shape(bg,22));root.setClipToOutline(true);
         LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(dp(10),dp(3),dp(3),dp(3));head.setBackground(shape(surface,14));
         TextView brand=text("VICH • МЕНЮ",15,Color.WHITE);brand.setTypeface(null,Typeface.BOLD);head.addView(brand,new LinearLayout.LayoutParams(0,dp(42),1));
         head.addView(btn("⌂",()->showTab("menu")),new LinearLayout.LayoutParams(dp(42),dp(42)));
@@ -122,29 +122,75 @@ public class FloatingService extends Service {
     }
     private void showOpenSearch(){
         LinearLayout box=column();
-        box.addView(text("Поиск по открытым источникам",21,Color.WHITE));
-        box.addView(text("Введи @username, ссылку t.me или номер. Здесь показываются публичные ссылки и инструкции проверки; закрытые данные не извлекаются.",13,Color.LTGRAY));
-        EditText input=new EditText(this);input.setSingleLine(true);input.setTextColor(Color.WHITE);input.setHintTextColor(Color.LTGRAY);input.setHint("@username, t.me/... или номер");input.setBackground(shape(bg,10));input.setPadding(dp(10),0,dp(10),0);
-        LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(-1,dp(48));ip.topMargin=dp(12);box.addView(input,ip);
-        TextView result=text("Результаты появятся здесь.",13,Color.WHITE);result.setPadding(0,dp(12),0,dp(12));box.addView(result);
-        box.addView(btn("Найти публичные источники",()->{
-            String q=input.getText().toString().trim();
-            if(q.isEmpty()){result.setText("Сначала введи username, ссылку или номер.");return;}
-            String clean=q.startsWith("@")?q.substring(1):q;
-            if(clean.matches("[A-Za-z0-9_]{5,32}")){
-                String profile="https://t.me/"+clean;
-                result.setText("Telegram username: @"+clean+"\nПубличная ссылка: "+profile+"\n\nЧисловой Telegram ID нельзя надёжно определить только по username через обычную публичную ссылку. Для получения ID используй Telegram API в разрешённом контексте.\n\nДополнительный поиск по точному username:");
-                addSearchLink(box,"Искать точный username в интернете","https://www.google.com/search?q="+Uri.encode("\""+q+"\""));
-                addSearchLink(box,"Поиск публичных упоминаний в GitHub","https://github.com/search?q="+Uri.encode(q)+"&type=users");
-            }else if(q.matches("(?i)https?://t\\.me/[^\\s]+")){
-                result.setText("Ссылка на публичный Telegram-профиль/канал:\n"+q+"\n\nОткрой профиль и проверь доступную публичную информацию. Username может измениться, а ссылка не подтверждает личность владельца.");
-                addSearchLink(box,"Искать ссылку в интернете","https://www.google.com/search?q="+Uri.encode("\""+q+"\""));
-            }else{
-                result.setText("Номер для проверки: "+q+"\nПоиск по номеру не раскрывает гарантированно владельца или его Telegram ID. Используй публичные результаты и сверяй совпадения вручную.");
-                addSearchLink(box,"Искать точный номер в интернете","https://www.google.com/search?q="+Uri.encode("\""+q+"\""));
-            }
+        box.addView(text("Проверка номера телефона",21,Color.WHITE));
+        box.addView(text("Страна и примерный регион по телефонному коду. Оператор показывается только как исходный диапазон: после переноса номера он может быть другим.",13,Color.LTGRAY));
+        EditText input=new EditText(this);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_PHONE);input.setTextColor(Color.WHITE);input.setHintTextColor(Color.LTGRAY);input.setHint("+7 918 123-45-67");input.setBackground(shape(bg,14));input.setPadding(dp(12),0,dp(12),0);
+        LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(-1,dp(50));ip.topMargin=dp(12);box.addView(input,ip);
+        TextView result=text("Введи номер и нажми «Проверить».",14,Color.WHITE);result.setPadding(0,dp(12),0,dp(12));box.addView(result);
+        LinearLayout links=new LinearLayout(this);links.setOrientation(LinearLayout.VERTICAL);box.addView(links);
+        box.addView(btn("Проверить номер",()->{
+            String digits=input.getText().toString().replaceAll("[^0-9]","");
+            if(digits.startsWith("00"))digits=digits.substring(2);
+            if(digits.startsWith("8")&&digits.length()==11)digits="7"+digits.substring(1);
+            if(digits.length()<7||digits.length()>15){result.setText("Неверный формат. Укажи от 7 до 15 цифр, желательно с кодом страны.");links.removeAllViews();return;}
+            String country="Страна по коду не определена",region="Регион не определён",operator="Текущий оператор не подтверждён";
+            if(digits.startsWith("7")){
+                country="Россия или Казахстан (+7)";String n=digits.substring(1);
+                if(n.length()>=3){String[] info=ruPrefixInfo(n.substring(0,3));if(info!=null){region=info[0];operator="Исходный диапазон: "+info[1]+" (может измениться после переноса номера)";}else if(n.startsWith("9"))region="Мобильный номер РФ; регион по этому префиксу точно не определён";}
+                if(n.startsWith("6")||n.startsWith("7")){country="Казахстан (+7)";region="Регион требует проверки по актуальной базе нумерации";}
+            }else if(digits.startsWith("33"))country="Франция (+33)";
+            else if(digits.startsWith("1"))country="США/Канада и другие страны NANP (+1)";
+            else if(digits.startsWith("44"))country="Великобритания (+44)";
+            else if(digits.startsWith("49"))country="Германия (+49)";
+            else if(digits.startsWith("380"))country="Украина (+380)";
+            else if(digits.startsWith("375"))country="Беларусь (+375)";
+            else if(digits.startsWith("998"))country="Узбекистан (+998)";
+            else if(digits.startsWith("994"))country="Азербайджан (+994)";
+            else if(digits.startsWith("90"))country="Турция (+90)";
+            else if(digits.startsWith("971"))country="ОАЭ (+971)";
+            else if(digits.startsWith("91"))country="Индия (+91)";
+            else if(digits.startsWith("86"))country="Китай (+86)";
+            String number="+"+digits;
+            result.setText("Номер: "+number+"\\n"+country+"\\n"+region+"\\n"+operator+"\\n\\nСсылки ведут в сервисы или поиск и не гарантируют, что аккаунт существует.");
+            links.removeAllViews();
+            addSearchLink(links,"Telegram • открыть по номеру","https://t.me/+"+digits);
+            addSearchLink(links,"WhatsApp • открыть чат","https://wa.me/"+digits);
+            addSearchLink(links,"Viber • открыть чат","viber://chat?number=%2B"+digits);
+            addSearchLink(links,"TikTok • поиск","https://www.tiktok.com/search?q="+Uri.encode(number));
+            addSearchLink(links,"YouTube • поиск","https://www.youtube.com/results?search_query="+Uri.encode(number));
+            addSearchLink(links,"Google • поиск номера","https://www.google.com/search?q="+Uri.encode(number));
+            addSearchLink(links,"Bing • поиск номера","https://www.bing.com/search?q="+Uri.encode(number));
+            addSearchLink(links,"DuckDuckGo • поиск номера","https://duckduckgo.com/?q="+Uri.encode(number));
         }));
-        content.addView(new ScrollView(this){{addView(box);}},new FrameLayout.LayoutParams(-1,-1));
+        ScrollView scroll=new ScrollView(this);scroll.setBackground(shape(surface,14));scroll.setClipToOutline(true);scroll.addView(box);content.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
+    }
+    private String[] ruPrefixInfo(String prefix){
+        switch(prefix){
+            case "903":case "905":return new String[]{"Москва и некоторые другие регионы","исторически Билайн"};
+            case "916":return new String[]{"Москва и Московская область","исторически МТС"};
+            case "925":case "926":case "936":return new String[]{"Москва и Московская область","исторически МегаФон"};
+            case "918":return new String[]{"Краснодарский край и Адыгея (часть диапазона)","исторически МТС"};
+            case "912":return new String[]{"Урал (часть диапазона)","исторически МТС"};
+            case "913":return new String[]{"Сибирь (часть диапазона)","исторически МТС"};
+            case "914":return new String[]{"Дальний Восток (часть диапазона)","исторически МТС"};
+            case "915":return new String[]{"Центральная Россия (часть диапазона)","исторически МТС"};
+            case "917":return new String[]{"Поволжье и некоторые другие регионы","исторически МТС"};
+            case "920":return new String[]{"Центральная Россия и Поволжье","исторически МегаФон"};
+            case "921":return new String[]{"Северо-Запад России","исторически МегаФон"};
+            case "922":return new String[]{"Урал","исторически МегаФон"};
+            case "923":return new String[]{"Сибирь","исторически МегаФон"};
+            case "924":return new String[]{"Дальний Восток","исторически МегаФон"};
+            case "927":return new String[]{"Поволжье","исторически МегаФон"};
+            case "928":return new String[]{"Северный Кавказ и юг России","исторически МегаФон"};
+            case "930":return new String[]{"Центральная Россия","исторически МегаФон"};
+            case "931":return new String[]{"Северо-Запад России","исторически МегаФон"};
+            case "932":return new String[]{"Урал","исторически МегаФон"};
+            case "933":return new String[]{"Сибирь","исторически МегаФон"};
+            case "934":return new String[]{"Дальний Восток","исторически МегаФон"};
+            case "937":return new String[]{"Поволжье","исторически МегаФон"};
+            case "938":return new String[]{"Юг России и Северный Кавказ","исторически МегаФон"};
+            default:return null;
+        }
     }
     private void addSearchLink(LinearLayout box,String title,String url){
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(42));lp.topMargin=dp(6);
@@ -172,7 +218,7 @@ public class FloatingService extends Service {
         input.setHint(ai?"Задай вопрос ИИ":"Адрес сайта или поисковый запрос");input.setBackground(shape(bg,10));input.setPadding(dp(10),0,dp(10),0);
         row.addView(input,new LinearLayout.LayoutParams(0,dp(46),1));
         row.addView(btn(ai?"Спросить":"Открыть",()->navigate(input.getText().toString(),ai)),new LinearLayout.LayoutParams(dp(82),dp(46)));box.addView(row);
-        web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);web.setWebViewClient(new WebViewClient());web.setWebChromeClient(new WebChromeClient());web.setBackgroundColor(Color.WHITE);
+        web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);web.setWebViewClient(new WebViewClient());web.setWebChromeClient(new WebChromeClient());web.setBackground(shape(Color.WHITE,14));web.setClipToOutline(true);
         box.addView(web,new LinearLayout.LayoutParams(-1,0,1));content.addView(box,new FrameLayout.LayoutParams(-1,-1));
         input.setOnEditorActionListener((v,id,event)->{if(id==EditorInfo.IME_ACTION_GO||id==EditorInfo.IME_ACTION_DONE){navigate(input.getText().toString(),ai);return true;}return false;});
         if(ai){input.setText("https://chatgpt.com");web.loadUrl("https://chatgpt.com");}else web.loadUrl("https://www.google.com");
@@ -271,7 +317,7 @@ public class FloatingService extends Service {
     private void collapse(){
         if(panel!=null)try{wm.removeView(panel);}catch(Exception ignored){}
         if(web!=null){web.destroy();web=null;}
-        TextView bubble=text("V",22,Color.WHITE);bubble.setGravity(Gravity.CENTER);bubble.setTypeface(null,Typeface.BOLD);bubble.setBackground(shape(accent,50));
+        TextView bubble=text("V",22,Color.WHITE);bubble.setGravity(Gravity.CENTER);bubble.setTypeface(null,Typeface.BOLD);bubble.setBackground(shape(accent,50));bubble.setClipToOutline(true);
         params.width=dp(58);params.height=dp(58);params.x=dp(18);params.y=dp(220);
         bubble.setOnTouchListener((v,e)->{switch(e.getAction()){
             case MotionEvent.ACTION_DOWN:downX=e.getRawX();downY=e.getRawY();lastX=downX;lastY=downY;return true;
