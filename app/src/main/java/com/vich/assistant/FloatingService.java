@@ -23,6 +23,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.SeekBar;
 import android.widget.Toast;
 import android.text.TextWatcher;
 import android.text.Editable;
@@ -36,6 +37,7 @@ public class FloatingService extends Service {
     private WindowManager wm; private View panel; private WindowManager.LayoutParams params;
     private FrameLayout content; private WebView web; private int sw,sh; private float lastX,lastY,downX,downY;
     private String activeTab="menu";
+    private int bubbleDp=58, panelWidthPct=92, panelHeightPct=76;
     private final int bg=Color.rgb(17,23,39), surface=Color.rgb(31,41,61), accent=Color.rgb(35,190,170);
     private int dp(float n){return (int)(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color,float radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
@@ -68,7 +70,8 @@ public class FloatingService extends Service {
     }
     private void showPanel(){
         wm=(WindowManager)getSystemService(WINDOW_SERVICE); sw=getResources().getDisplayMetrics().widthPixels; sh=getResources().getDisplayMetrics().heightPixels;
-        params=new WindowManager.LayoutParams((int)(sw*.92f),(int)(sh*.76f),Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE,
+        android.content.SharedPreferences prefs=getSharedPreferences("vich_ui",MODE_PRIVATE);bubbleDp=prefs.getInt("bubble_size",58);panelWidthPct=prefs.getInt("panel_width",92);panelHeightPct=prefs.getInt("panel_height",76);
+        params=new WindowManager.LayoutParams((int)(sw*panelWidthPct/100f),(int)(sh*panelHeightPct/100f),Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE,
           WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
         params.gravity=Gravity.TOP|Gravity.START;params.x=(sw-params.width)/2;params.y=sh/10;params.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(8),dp(8),dp(8),dp(6));root.setBackground(shape(bg,22));
@@ -90,7 +93,7 @@ public class FloatingService extends Service {
     private void showTab(String tab){
         activeTab=tab;if(web!=null){try{web.stopLoading();web.destroy();}catch(Exception ignored){}web=null;}
         if(content==null)return;content.removeAllViews();
-        if("menu".equals(tab))showMenu();else if("ai".equals(tab))showWeb(true);else if("browser".equals(tab))showWeb(false);else if("apps".equals(tab))showApps();else if("commands".equals(tab))showCommands();else showTools();
+        if("menu".equals(tab))showMenu();else if("sizes".equals(tab))showSizes();else if("ai".equals(tab))showWeb(true);else if("browser".equals(tab))showWeb(false);else if("apps".equals(tab))showApps();else if("commands".equals(tab))showCommands();else showTools();
     }
     private void showMenu(){
         LinearLayout list=column();list.addView(text("Чем займёмся?",24,Color.WHITE));list.addView(text("Выбери функцию — браузер сам не откроется.",14,Color.LTGRAY));
@@ -99,7 +102,32 @@ public class FloatingService extends Service {
         addMenuCard(list,"📱 Запуск приложений","Поиск установленных приложений","apps");
         addMenuCard(list,"🌐 Браузер","Сайты и поиск","browser");
         addMenuCard(list,"🧰 Быстрые настройки","Wi-Fi, Bluetooth, звук и настройки Android","tools");
+        addMenuCard(list,"📐 Размеры пузыря и окна","Настрой ширину и высоту окна, размер плавающего пузыря","sizes");
         content.addView(new ScrollView(this){{addView(list);}},new FrameLayout.LayoutParams(-1,-1));
+    }
+    private void showSizes(){
+        LinearLayout box=column();
+        box.addView(text("Размеры окна и пузыря",22,Color.WHITE));
+        box.addView(text("Изменения сохраняются и применяются к следующему открытию окна.",13,Color.LTGRAY));
+        addSizeControl(box,"Размер пузыря",28,100,bubbleDp,"bubble_size","dp",v->{bubbleDp=v;});
+        addSizeControl(box,"Ширина окна",55,100,panelWidthPct,"panel_width","%",v->{panelWidthPct=v;});
+        addSizeControl(box,"Высота окна",35,95,panelHeightPct,"panel_height","%",v->{panelHeightPct=v;});
+        box.addView(btn("Применить размер окна",()->{
+            getSharedPreferences("vich_ui",MODE_PRIVATE).edit().putInt("bubble_size",bubbleDp).putInt("panel_width",panelWidthPct).putInt("panel_height",panelHeightPct).apply();
+            if(params!=null){params.width=(int)(sw*panelWidthPct/100f);params.height=(int)(sh*panelHeightPct/100f);try{wm.updateViewLayout(panel,params);}catch(Exception ignored){}}
+            Toast.makeText(this,"Размеры сохранены",Toast.LENGTH_SHORT).show();
+        }));
+        content.addView(new ScrollView(this){{addView(box);}},new FrameLayout.LayoutParams(-1,-1));
+    }
+    private interface IntSetter{void set(int value);}
+    private void addSizeControl(LinearLayout parent,String title,int min,int max,int initial,String key,String unit,IntSetter setter){
+        TextView label=text(title+": "+initial+unit,15,Color.WHITE);parent.addView(label);
+        SeekBar seek=new SeekBar(this);seek.setMax(max-min);seek.setProgress(Math.max(0,Math.min(max-min,initial-min)));parent.addView(seek,new LinearLayout.LayoutParams(-1,dp(42)));
+        seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onProgressChanged(SeekBar b,int progress,boolean fromUser){int val=min+progress;label.setText(title+": "+val+unit);setter.set(val);}
+            public void onStartTrackingTouch(SeekBar b){}
+            public void onStopTrackingTouch(SeekBar b){}
+        });
     }
     private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(dp(12),dp(12),dp(12),dp(12));return l;}
     private void addMenuCard(LinearLayout parent,String title,String desc,String tab){
@@ -219,7 +247,7 @@ public class FloatingService extends Service {
             case MotionEvent.ACTION_MOVE:params.x+=(int)(e.getRawX()-lastX);params.y+=(int)(e.getRawY()-lastY);lastX=e.getRawX();lastY=e.getRawY();update();return true;
             case MotionEvent.ACTION_UP:if(Math.abs(e.getRawX()-downX)<dp(8)&&Math.abs(e.getRawY()-downY)<dp(8)){try{wm.removeView(v);}catch(Exception ignored){}panel=null;activeTab="menu";showPanel();}return true;
         }return true;});
-        panel=bubble;wm.addView(panel,params);
+        WindowManager.LayoutParams bubbleParams=new WindowManager.LayoutParams(dp(bubbleDp),dp(bubbleDp),Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT);bubbleParams.gravity=Gravity.TOP|Gravity.START;bubbleParams.x=dp(12);bubbleParams.y=sh/3;params=bubbleParams;panel=bubble;wm.addView(panel,params);
     }
     @Override public void onDestroy(){if(web!=null){try{web.stopLoading();web.destroy();}catch(Exception ignored){}}try{if(panel!=null)wm.removeView(panel);}catch(Exception ignored){}panel=null;super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}
