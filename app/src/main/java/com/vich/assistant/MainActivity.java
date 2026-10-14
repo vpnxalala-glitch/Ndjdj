@@ -108,7 +108,7 @@ public class MainActivity extends Activity {
             client = Client.create(this::onTdUpdate,
                 e -> runOnUiThread(() -> setStatus("Ошибка TDLib: " + e.getMessage())),
                 e -> runOnUiThread(() -> setStatus("Ошибка: " + e.getMessage())));
-            setStatus("Подключаем Telegram…");
+            setStatus("Подключаем VichGram…");
         } catch (Throwable e) {
             client = null;
             setStatus("Не удалось загрузить TDLib: " + e.getClass().getSimpleName());
@@ -207,14 +207,14 @@ public class MainActivity extends Activity {
 
     private void showWelcome() {
         content.removeAllViews();
-        heading("VichGram", "Твой мессенджер в аккуратном неоновом оформлении. Введи номер телефона — дальше проведёт Telegram.");
+        heading("VichGram", "Твой мессенджер в аккуратном неоновом оформлении. Введи номер телефона, чтобы войти в VichGram.");
         phoneField = field("Номер телефона с кодом страны", InputType.TYPE_CLASS_PHONE);
         button("Получить код", this::startAuthorization);
         button("Проверить обновления", this::checkForUpdates);
 
         featureCard("01", "ЧАТЫ И СООБЩЕНИЯ", "Открывай диалоги, читай историю и отправляй текстовые сообщения.");
         featureCard("02", "ПОИСК ПО ДИАЛОГАМ", "Быстро находи нужный чат по имени или последнему сообщению.");
-        featureCard("03", "ЗАЩИЩЁННЫЙ ВХОД", "Код приходит через Telegram или SMS. Пароль 2FA потребуется только если он включён в аккаунте.");
+        featureCard("03", "ЗАЩИЩЁННЫЙ ВХОД", "Код подтверждения приходит в приложение или по SMS. Пароль 2FA потребуется, только если он включён в аккаунте.");
 
         TextView note = text("Технические параметры приложения настраиваются при сборке и не запрашиваются у пользователей.", 12, MUTED, false);
         note.setLineSpacing(dp(3), 1f);
@@ -303,7 +303,7 @@ public class MainActivity extends Activity {
                 final String downloadUrl = apkUrl;
                 runOnUiThread(() -> new android.app.AlertDialog.Builder(this)
                     .setTitle("Доступно обновление")
-                    .setMessage("Найдена версия " + latestName + ". Скачать и установить обновление? Приложение и данные Telegram будут сохранены.")
+                    .setMessage("Найдена версия " + latestName + ". Скачать и установить обновление? Приложение и данные аккаунта будут сохранены.")
                     .setNegativeButton("Позже", (d, w) -> setStatus("Обновление отложено"))
                     .setPositiveButton("Обновить", (d, w) -> downloadAndInstall(downloadUrl))
                     .show());
@@ -378,7 +378,7 @@ public class MainActivity extends Activity {
 
     private void startAuthorization() {
         if (!hasTelegramCredentials()) {
-            setStatus("Сборка не настроена для входа в Telegram");
+            setStatus("Вход в VichGram пока не настроен");
             toast("Разработчику нужно один раз настроить VICHGRAM_TG_API_ID и VICHGRAM_TG_API_HASH в секретах GitHub. Пользователям эти данные вводить не придётся.");
             return;
         }
@@ -433,7 +433,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(this::showChats);
                 client.send(new TdApi.GetChats(new TdApi.ChatListMain(), 100), this::handleResponse);
             } else if (state instanceof TdApi.AuthorizationStateWaitOtherDeviceConfirmation) {
-                runOnUiThread(() -> setStatus("Подтверди вход по ссылке, показанной Telegram."));
+                runOnUiThread(() -> setStatus("Подтверди вход по ссылке в приложении."));
             } else if (state instanceof TdApi.AuthorizationStateClosed) {
                 runOnUiThread(() -> setStatus("Соединение с TDLib закрыто."));
             }
@@ -489,7 +489,7 @@ public class MainActivity extends Activity {
 
     private void showPhoneEntry() {
         content.removeAllViews();
-        heading("Вход в Telegram", "Введи номер телефона, на который придёт код подтверждения.");
+        heading("Вход в VichGram", "Введи номер телефона, на который придёт код подтверждения.");
         phoneField = field("Номер телефона с кодом страны", InputType.TYPE_CLASS_PHONE);
         button("Отправить код", () -> {
             String phone = phoneField.getText().toString().trim();
@@ -508,19 +508,19 @@ public class MainActivity extends Activity {
     private void showCodeEntry() {
         content.removeAllViews();
         heading("Код подтверждения", "Введи код, который Telegram отправил в приложение или SMS.");
-        codeField = field("Код Telegram", InputType.TYPE_CLASS_NUMBER);
+        codeField = field("Код подтверждения", InputType.TYPE_CLASS_NUMBER);
         button("Подтвердить код", () -> {
             String code = codeField.getText().toString().trim();
             if (code.isEmpty()) { toast("Введи код"); return; }
             client.send(new TdApi.CheckAuthenticationCode(code), this::handleResponse);
             setStatus("Проверяем код…");
         });
-        setStatus("Ожидается код Telegram");
+        setStatus("Ожидается код подтверждения");
     }
 
     private void showPasswordEntry() {
         content.removeAllViews();
-        heading("Облачный пароль", "Для аккаунта включена двухэтапная проверка. Введи пароль Telegram.");
+        heading("Облачный пароль", "Для аккаунта включена двухэтапная проверка. Введи пароль аккаунта.");
         passwordField = field("Пароль двухэтапной проверки", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         button("Войти", () -> {
             String password = passwordField.getText().toString();
@@ -528,14 +528,14 @@ public class MainActivity extends Activity {
             client.send(new TdApi.CheckAuthenticationPassword(password), this::handleResponse);
             setStatus("Проверяем пароль…");
         });
-        setStatus("Ожидается пароль Telegram");
+        setStatus("Ожидается пароль аккаунта");
     }
 
     private void handleResponse(TdApi.Object object) {
         if (object instanceof TdApi.Error) {
             TdApi.Error error = (TdApi.Error) object;
             runOnUiThread(() -> {
-                setStatus("Telegram: " + error.code + " — " + error.message);
+                setStatus("VichGram: " + error.code + " — " + error.message);
                 toast(error.message);
             });
         } else if (object instanceof TdApi.Ok) {
@@ -566,7 +566,7 @@ public class MainActivity extends Activity {
         chatRows = null;
         chatQuery = "";
         renderChats();
-        setStatus("Telegram подключён");
+        setStatus("VichGram подключён");
     }
 
     private void renderChats() {
@@ -774,8 +774,8 @@ public class MainActivity extends Activity {
             "Конфиденциальность",
             "Уведомления и звуки",
             "Папки чатов",
-            "Telegram Premium",
-            "Telegram Stars",
+            "VichGram Premium",
+            "VichGram Stars",
             "Данные и память"
         };
         new android.app.AlertDialog.Builder(this)
@@ -783,7 +783,7 @@ public class MainActivity extends Activity {
             .setItems(items, (dialog, which) -> {
                 switch (which) {
                     case 0:
-                        showSettingsInfo("Аккаунты", "Управление текущим аккаунтом Telegram. Поддержка нескольких аккаунтов требует отдельного подключения и пока не реализована.");
+                        showSettingsInfo("Аккаунты", "Управление текущим аккаунтом VichGram. Поддержка нескольких аккаунтов требует отдельного подключения.");
                         break;
                     case 1:
                         showVichGramMenu();
@@ -792,7 +792,7 @@ public class MainActivity extends Activity {
                         openAppearanceSettings();
                         break;
                     case 3:
-                        showSettingsInfo("Конфиденциальность", "Настройки конфиденциальности Telegram доступны через официальный клиент. Собственные переключатели VichGram здесь ещё не подключены.");
+                        showSettingsInfo("Конфиденциальность", "Настройки конфиденциальности аккаунта. Дополнительные переключатели VichGram будут добавляться отдельно.");
                         break;
                     case 4:
                         showSettingsInfo("Уведомления и звуки", "Панель уведомлений VichGram будет подключена отдельным этапом.");
@@ -801,10 +801,10 @@ public class MainActivity extends Activity {
                         showSettingsInfo("Папки чатов", "Чаты сейчас показаны единым списком по времени последнего сообщения — без разделения на чаты, группы и каналы.");
                         break;
                     case 6:
-                        showSettingsInfo("Telegram Premium", "Статус Premium определяется вашим аккаунтом Telegram. Покупка подписки из VichGram пока не реализована.");
+                        showSettingsInfo("VichGram Premium", "Раздел Premium. Здесь будут отображаться возможности подписки, доступные вашему аккаунту.");
                         break;
                     case 7:
-                        showSettingsInfo("Telegram Stars", "Баланс и операции со Stars пока не подключены в VichGram.");
+                        showSettingsInfo("VichGram Stars", "Раздел Stars для просмотра звёзд и связанных возможностей аккаунта.");
                         break;
                     case 8:
                         showSettingsInfo("Данные и память", "Очистка кэша и управление хранилищем пока не подключены.");
