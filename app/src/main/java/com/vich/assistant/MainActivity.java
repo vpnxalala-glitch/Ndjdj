@@ -347,20 +347,106 @@ public class MainActivity extends Activity {
     }
 
     private void renderChats() {
-        if (content == null || isFinishing()) return;
-        if (content.getChildCount() == 0) heading("Сообщения", "Загружаем список диалогов…");
+        if (content == null || isFinishing() || selectedChat != null) return;
+        content.removeAllViews();
+        heading("Сообщения", chats.isEmpty() ? "Ожидаем синхронизацию диалогов…" : "Выбери диалог, чтобы открыть историю.");
         synchronized (chats) {
             for (int i = 0; i < chats.size(); i++) {
                 final TdApi.Chat chat = chats.get(i);
                 String label = chat.title == null || chat.title.isEmpty() ? "Диалог" : chat.title;
-                TextView row = text(label + "\n" + (chat.lastMessage == null ? "Открыть диалог" : messagePreview(chat.lastMessage)), 15, WHITE, true);
+                TextView row = text(label + "\\n" + (chat.lastMessage == null ? "Открыть диалог" : messagePreview(chat.lastMessage)), 15, WHITE, true);
                 row.setPadding(dp(15), dp(14), dp(15), dp(14));
                 row.setBackground(rounded(PANEL, Color.rgb(34, 51, 76)));
+                row.setOnClickListener(v -> openChat(chat));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
                 lp.bottomMargin = dp(9);
                 content.addView(row, lp);
             }
         }
+    }
+
+    private void openChat(TdApi.Chat chat) {
+        selectedChat = chat;
+        synchronized (messages) { messages.clear(); }
+        renderMessages();
+        TdApi.GetChatHistory history = new TdApi.GetChatHistory();
+        history.chatId = chat.id;
+        history.fromMessageId = 0;
+        history.offset = 0;
+        history.limit = 50;
+        history.onlyLocal = false;
+        client.send(history, result -> {
+            if (result instanceof TdApi.Messages) {
+                TdApi.Message[] items = ((TdApi.Messages) result).messages;
+                synchronized (messages) {
+                    messages.clear();
+                    for (int i = items.length - 1; i >= 0; i--) messages.add(items[i]);
+                }
+                runOnUiThread(this::renderMessages);
+            } else if (result instanceof TdApi.Error) {
+                runOnUiThread(() -> setStatus("Не удалось загрузить историю: " + ((TdApi.Error) result).message));
+            }
+        });
+    }
+
+    private void renderMessages() {
+        if (selectedChat == null || content == null) return;
+        content.removeAllViews();
+        TextView back = text("‹  Все чаты", 15, CYAN, true);
+        back.setPadding(0, dp(8), 0, dp(12));
+        back.setOnClickListener(v -> {
+            selectedChat = null;
+            messageField = null;
+            showChats();
+        });
+        content.addView(back);
+        heading(selectedChat.title == null ? "Диалог" : selectedChat.title, "История и отправка сообщений через TDLib.");
+        synchronized (messages) {
+            for (TdApi.Message m : messages) {
+                TextView bubble = text((m.isOutgoing ? "Вы" : "Сообщение") + "\\n" + messagePreview(m), 14, WHITE, false);
+                bubble.setPadding(dp(13), dp(10), dp(13), dp(10));
+                bubble.setBackground(rounded(m.isOutgoing ? Color.rgb(24, 69, 79) : PANEL, 0));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+                lp.bottomMargin = dp(7);
+                content.addView(bubble, lp);
+            }
+        }
+        LinearLayout composer = new LinearLayout(this);
+        composer.setOrientation(LinearLayout.HORIZONTAL);
+        composer.setGravity(Gravity.CENTER_VERTICAL);
+        messageField = new EditText(this);
+        messageField.setHint("Сообщение…");
+        messageField.setTextColor(WHITE);
+        messageField.setHintTextColor(MUTED);
+        messageField.setTextSize(14);
+        messageField.setPadding(dp(12), dp(4), dp(12), dp(4));
+        messageField.setBackground(rounded(PANEL, Color.rgb(44, 63, 91)));
+        composer.addView(messageField, new LinearLayout.LayoutParams(0, dp(50), 1));
+        Button send = new Button(this);
+        send.setText("➤");
+        send.setAllCaps(false);
+        send.setTextColor(BG);
+        send.setBackground(rounded(CYAN, 0));
+        LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(dp(54), dp(50));
+        sendLp.leftMargin = dp(8);
+        composer.addView(send, sendLp);
+        send.setOnClickListener(v -> sendMessage());
+        LinearLayout.LayoutParams composerLp = new LinearLayout.LayoutParams(-1, -2);
+        composerLp.topMargin = dp(10);
+        content.addView(composer, composerLp);
+    }
+
+    private void sendMessage() {
+        if (client == null || selectedChat == null || messageField == null) return;
+        String value = messageField.getText().toString().trim();
+        if (value.isEmpty()) return;
+        TdApi.SendMessage request = new TdApi.SendMessage();
+        request.chatId = selectedChat.id;
+        request.inputMessageContent = new TdApi.InputMessageText(new TdApi.FormattedText(value, null), null, true);
+        client.send(request, result -> {
+            if (result instanceof TdApi.Error) runOnUiThread(() -> toast(((TdApi.Error) result).message));
+        });
+        messageField.setText("");
     }
 
     private String messagePreview(TdApi.Message message) {
