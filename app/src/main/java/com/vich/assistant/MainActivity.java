@@ -479,7 +479,7 @@ public class MainActivity extends Activity {
             p.systemLanguageCode = Locale.getDefault().getLanguage();
             p.deviceModel = android.os.Build.MODEL;
             p.systemVersion = android.os.Build.VERSION.RELEASE;
-            p.applicationVersion = "0.3.0";
+            p.applicationVersion = BuildConfig.VERSION_NAME;
             parametersSent = true;
             client.send(p, this::handleResponse);
         } catch (Throwable e) {
