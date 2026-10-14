@@ -37,7 +37,10 @@ public class MainActivity extends Activity {
     private EditText apiIdField, apiHashField, phoneField, codeField, passwordField;
     private String apiId = "", apiHash = "";
     private boolean parametersSent;
+    private TdApi.Chat selectedChat;
+    private EditText messageField;
     private final List<TdApi.Chat> chats = new ArrayList<>();
+    private final List<TdApi.Message> messages = new ArrayList<>();
 
     private int dp(float value) {
         return (int) (value * getResources().getDisplayMetrics().density);
@@ -228,6 +231,12 @@ public class MainActivity extends Activity {
                 if (i >= 0) chats.get(i).title = ((TdApi.UpdateChatTitle) update).title;
             }
             runOnUiThread(this::renderChats);
+        } else if (update instanceof TdApi.UpdateNewMessage) {
+            TdApi.Message message = ((TdApi.UpdateNewMessage) update).message;
+            if (selectedChat != null && selectedChat.id == message.chatId) {
+                synchronized (messages) { messages.add(0, message); }
+                runOnUiThread(this::renderMessages);
+            }
         }
     }
 
