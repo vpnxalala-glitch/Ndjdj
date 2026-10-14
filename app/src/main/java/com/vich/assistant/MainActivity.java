@@ -261,11 +261,6 @@ public class MainActivity extends Activity {
             p.ignoreFileNames = false;
             parametersSent = true;
             client.send(p, this::handleResponse);
-            if (!pendingPhone.isEmpty()) {
-                String phone = pendingPhone;
-                pendingPhone = "";
-                client.send(new TdApi.SetAuthenticationPhoneNumber(phone, null), this::handleResponse);
-            }
         } catch (Throwable e) {
             runOnUiThread(() -> toast("Не удалось настроить TDLib: " + e.getMessage()));
         }
@@ -318,7 +313,14 @@ public class MainActivity extends Activity {
                 toast(error.message);
             });
         } else if (object instanceof TdApi.Ok) {
-            runOnUiThread(() -> setStatus("Запрос принят"));
+            if (parametersSent && !pendingPhone.isEmpty()) {
+                String phone = pendingPhone;
+                pendingPhone = "";
+                client.send(new TdApi.SetAuthenticationPhoneNumber(phone, null), this::handleResponse);
+                runOnUiThread(() -> setStatus("Запрашиваем код подтверждения…"));
+            } else {
+                runOnUiThread(() -> setStatus("Запрос принят"));
+            }
         } else if (object instanceof TdApi.Chats) {
             long[] ids = ((TdApi.Chats) object).chatIds;
             for (long id : ids) client.send(new TdApi.GetChat(id), result -> {
