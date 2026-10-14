@@ -787,7 +787,7 @@ public class MainActivity extends Activity {
             .setTitle("Оформление VichGram")
             .setView(panel)
             .setPositiveButton("Обои чатов", (dialog, which) -> pickWallpaper())
-            .setNeutralButton("Убрать обои", (dialog, which) -> clearWallpaper())
+            .setNeutralButton("Убрать обои", (dialog, which) -> clearChatWallpaper())
             .setNegativeButton("Готово", (dialog, which) -> {
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_GLASS, glassSwitch.isChecked()).apply();
                 renderChatRows();
@@ -808,7 +808,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void clearWallpaper() {
+    private void clearChatWallpaper() {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(PREF_WALLPAPER).apply();
         if (scrollView != null) scrollView.setBackgroundColor(BG);
         setStatus("Обои убраны");
