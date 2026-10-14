@@ -185,7 +185,7 @@ public class MainActivity extends Activity {
     }
 
 
-    private static final String RELEASES_API = "https://api.github.com/repos/vpnxalala-glitch/Ndjdj/releases/latest";
+    private static final String RELEASES_API = "https://api.github.com/repos/vpnxalala-glitch/Ndjdj/releases?per_page=10";
 
     private void checkForUpdates() {
         setStatus("Проверяем обновления…");
@@ -206,19 +206,24 @@ public class MainActivity extends Activity {
                     int n;
                     while ((n = in.read(buffer)) != -1) json.append(new String(buffer, 0, n, java.nio.charset.StandardCharsets.UTF_8));
                 }
-                JSONObject release = new JSONObject(json.toString());
-                JSONArray assets = release.optJSONArray("assets");
+                JSONArray releases = new JSONArray(json.toString());
+                JSONObject release = null;
                 String apkUrl = null;
-                if (assets != null) {
+                for (int r = 0; r < releases.length(); r++) {
+                    JSONObject candidate = releases.getJSONObject(r);
+                    JSONArray assets = candidate.optJSONArray("assets");
+                    if (assets == null) continue;
                     for (int i = 0; i < assets.length(); i++) {
                         JSONObject asset = assets.getJSONObject(i);
                         if (asset.optString("name").toLowerCase(Locale.ROOT).endsWith(".apk")) {
+                            release = candidate;
                             apkUrl = asset.optString("browser_download_url");
                             break;
                         }
                     }
+                    if (release != null) break;
                 }
-                if (apkUrl == null || apkUrl.isEmpty()) throw new IllegalStateException("В последнем релизе пока нет APK");
+                if (release == null || apkUrl == null || apkUrl.isEmpty()) throw new IllegalStateException("В релизах пока нет APK");
                 PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
                 long installedCode = Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
                 long latestCode = parseReleaseVersionCode(release.optString("tag_name"));
