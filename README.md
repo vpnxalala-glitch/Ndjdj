@@ -1,29 +1,32 @@
-# VichGram
+# VichGram — clean Android base
 
-VichGram — Android-мессенджер на официальной TDLib с тёмной неоновой темой. В проекте нет плавающего пузыря: приложение открывается как обычный экран мессенджера.
+This branch, `dsh-clean-telegram-base`, is a cleanup starting point for integrating a proper Telegram Android client implementation. It is **not yet a functional messenger**.
 
-## Функции
-- Вход по номеру телефона и коду подтверждения Telegram.
-- Поддержка дополнительного пароля двухэтапной проверки, если он включён в аккаунте.
-- Список диалогов, поиск по имени и последнему сообщению.
-- Загрузка истории чата и отправка текстовых сообщений.
-- Проверка обновлений и загрузка APK из GitHub Releases.
-- Закруглённые карточки, поля ввода и кнопки в едином тёмном оформлении.
-- Выбор пользовательских обоев для фона списка чатов и экрана диалога; выбор сохраняется после перезапуска.
-- Переключатель «Стеклянные чаты»: полупрозрачные пузырчатые карточки с бирюзовой обводкой или обычный вид.
-- Настройки оформления доступны по значку шестерёнки в верхней панели.
+## Retained essentials
 
-## Telegram API credentials для сборки
+- Android Gradle project structure and app configuration.
+- VichGram application ID, label, and app icon resource.
+- Android manifest, launcher activity, and FileProvider path configuration.
+- GitHub Actions workflows for Android APK builds and TDLib package preparation.
+- Environment/Actions-secret based Telegram API credential configuration (values must never be committed).
+- Release/build pipeline and stable signing-key cache configuration.
 
-Пользователи не должны вводить API ID или API Hash. Разработчик должен один раз добавить в **Settings → Secrets and variables → Actions** репозитория следующие Actions secrets:
+## Removed from this branch
 
-- `VICHGRAM_TG_API_ID` — числовой API ID приложения из `my.telegram.org`.
-- `VICHGRAM_TG_API_HASH` — API Hash этого же приложения.
+The previous hand-built `MainActivity` chat UI and its custom chat-list/settings behavior were replaced with a minimal launcher placeholder. No claim is made that Telegram login, chats, history, or messaging work in this placeholder.
 
-Workflow передаёт значения в Gradle при сборке; они не хранятся в исходном коде и не выводятся в логи. Пока секреты не настроены, APK соберётся, но вход в новый аккаунт будет отключён с понятным сообщением. Не используй чужие API credentials.
+## Next integration steps
 
-## Сборка
+1. Bring in and review the official Telegram Android client source and its license/build requirements.
+2. Decide the correct architecture and dependencies; do not assume the existing TDLib-only scaffold is the same as the official Telegram Android app.
+3. Integrate in small commits and build after each step.
+4. Test authentication and real chats on a device before claiming functionality.
 
-GitHub Actions скачивает проверенный пакет TDLib, собирает debug APK и прикладывает его к prerelease. Последний APK находится на странице [Releases](https://github.com/vpnxalala-glitch/Ndjdj/releases).
+## Build
 
-Для тестирования нужно использовать Android 8.0+ (API 26+). Все действия авторизации и проверки кода выполняются официальной библиотекой TDLib.
+GitHub Actions workflows are retained. The Android workflow expects the TDLib artifact from the `build-tdlib.yml` workflow. Telegram API credentials, when needed, belong in repository Actions secrets:
+
+- `VICHGRAM_TG_API_ID`
+- `VICHGRAM_TG_API_HASH`
+
+Never place credential values in source files or commit history.
