@@ -63,20 +63,20 @@ public class FloatingService extends Service {
     private TextView findResultIn(android.view.ViewGroup group){
         for(int i=0;i<group.getChildCount();i++){
             View v=group.getChildAt(i);
-            if(v instanceof TextView && "vich_command_result".equals(v.getTag()))return (TextView)v;
+            if(v instanceof TextView && "vichgram_command_result".equals(v.getTag()))return (TextView)v;
             if(v instanceof android.view.ViewGroup){TextView found=findResultIn((android.view.ViewGroup)v);if(found!=null)return found;}
         }
         return null;
     }
     private void showPanel(){
         wm=(WindowManager)getSystemService(WINDOW_SERVICE); sw=getResources().getDisplayMetrics().widthPixels; sh=getResources().getDisplayMetrics().heightPixels;
-        android.content.SharedPreferences prefs=getSharedPreferences("vich_ui",MODE_PRIVATE);bubbleDp=prefs.getInt("bubble_size",58);panelWidthPct=prefs.getInt("panel_width",92);panelHeightPct=prefs.getInt("panel_height",76);
+        android.content.SharedPreferences prefs=getSharedPreferences("vichgram_ui",MODE_PRIVATE);bubbleDp=prefs.getInt("bubble_size",58);panelWidthPct=prefs.getInt("panel_width",92);panelHeightPct=prefs.getInt("panel_height",76);
         params=new WindowManager.LayoutParams((int)(sw*panelWidthPct/100f),(int)(sh*panelHeightPct/100f),Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE,
           WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
         params.gravity=Gravity.TOP|Gravity.START;params.x=(sw-params.width)/2;params.y=sh/10;params.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(8),dp(8),dp(8),dp(6));root.setBackground(shape(bg,22));root.setClipToOutline(true);
         LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(dp(10),dp(3),dp(3),dp(3));head.setBackground(shape(surface,14));
-        TextView brand=text("VICH • МЕНЮ",15,Color.WHITE);brand.setTypeface(null,Typeface.BOLD);head.addView(brand,new LinearLayout.LayoutParams(0,dp(42),1));
+        TextView brand=text("VichGram • NEON",15,Color.WHITE);brand.setTypeface(null,Typeface.BOLD);head.addView(brand,new LinearLayout.LayoutParams(0,dp(42),1));
         head.addView(btn("⌂",()->showTab("menu")),new LinearLayout.LayoutParams(dp(42),dp(42)));
         head.addView(btn("—",()->collapse()),new LinearLayout.LayoutParams(dp(42),dp(42)));
         head.addView(btn("×",()->stopSelf()),new LinearLayout.LayoutParams(dp(42),dp(42)));head.setOnTouchListener(this::drag);
@@ -114,7 +114,7 @@ public class FloatingService extends Service {
         addSizeControl(box,"Ширина окна",55,100,panelWidthPct,"panel_width","%",v->{panelWidthPct=v;});
         addSizeControl(box,"Высота окна",35,95,panelHeightPct,"panel_height","%",v->{panelHeightPct=v;});
         box.addView(btn("Применить размер окна",()->{
-            getSharedPreferences("vich_ui",MODE_PRIVATE).edit().putInt("bubble_size",bubbleDp).putInt("panel_width",panelWidthPct).putInt("panel_height",panelHeightPct).apply();
+            getSharedPreferences("vichgram_ui",MODE_PRIVATE).edit().putInt("bubble_size",bubbleDp).putInt("panel_width",panelWidthPct).putInt("panel_height",panelHeightPct).apply();
             if(params!=null){params.width=(int)(sw*panelWidthPct/100f);params.height=(int)(sh*panelHeightPct/100f);try{wm.updateViewLayout(panel,params);}catch(Exception ignored){}}
             Toast.makeText(this,"Размеры сохранены",Toast.LENGTH_SHORT).show();
         }));
@@ -257,7 +257,7 @@ public class FloatingService extends Service {
         box.addView(text("Примеры: открой YouTube • открой Telegram • найди погоду в Париже • открой настройки Wi-Fi • открой браузер",13,Color.LTGRAY));
         EditText command=new EditText(this);command.setHint("Введи команду…");command.setTextColor(Color.WHITE);command.setHintTextColor(Color.LTGRAY);command.setSingleLine(true);command.setBackground(shape(bg,10));command.setPadding(dp(12),0,dp(12),0);
         LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,dp(48));cp.topMargin=dp(12);box.addView(command,cp);
-        TextView result=text("Команды выполняются на устройстве; для запуска приложения оно должно быть установлено.",13,Color.LTGRAY);result.setTag("vich_command_result");result.setPadding(0,dp(12),0,dp(12));box.addView(result);
+        TextView result=text("Команды выполняются на устройстве; для запуска приложения оно должно быть установлено.",13,Color.LTGRAY);result.setTag("vichgram_command_result");result.setPadding(0,dp(12),0,dp(12));box.addView(result);
         box.addView(btn("Выполнить команду",()->runCommand(command.getText().toString(),result)));
         LinearLayout.LayoutParams voiceLp=new LinearLayout.LayoutParams(-1,dp(44));voiceLp.topMargin=dp(7);
         box.addView(btn("🎙 Сказать команду голосом",()->{try{startActivity(new Intent(this,VoiceCommandActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Exception e){result.setText("Голосовой ввод недоступен на устройстве.");}}),voiceLp);
