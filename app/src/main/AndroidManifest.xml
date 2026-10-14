@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <application
         android:icon="@drawable/vich_avatar"
         android:roundIcon="@drawable/vich_avatar"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="VichGram"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">
@@ -26,7 +24,5 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".VoiceCommandActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
-        <service android:name=".FloatingService" android:exported="false" />
     </application>
 </manifest>
