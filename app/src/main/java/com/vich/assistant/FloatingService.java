@@ -213,7 +213,23 @@ public class FloatingService extends Service {
         TextView d=text(desc,13,Color.LTGRAY);d.setPadding(0,dp(5),0,dp(8));c.addView(d);c.setOnClickListener(v->showTab(tab));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(10);parent.addView(c,lp);
     }
-    private void showTelegram(){\n        LinearLayout box=column();\n        box.addView(text("Telegram Web",20,Color.WHITE));\n        box.addView(text("Войди через официальный веб-интерфейс. Сессия хранится в данных WebView на устройстве. Не вводи код входа в сторонние окна.",12,Color.LTGRAY));\n        web=new WebView(this);\n        web.getSettings().setJavaScriptEnabled(true);\n        web.getSettings().setDomStorageEnabled(true);\n        web.getSettings().setDatabaseEnabled(true);\n        web.getSettings().setMediaPlaybackRequiresUserGesture(false);\n        web.setWebViewClient(new WebViewClient());\n        web.setWebChromeClient(new WebChromeClient());\n        web.setBackgroundColor(Color.WHITE);\n        box.addView(web,new LinearLayout.LayoutParams(-1,0,1));\n        content.addView(box,new FrameLayout.LayoutParams(-1,-1));\n        web.loadUrl("https://web.telegram.org/a/");\n    }\n    private void showWeb(boolean ai){
+    private void showTelegram(){
+        LinearLayout box=column();
+        box.addView(text("Telegram Web",20,Color.WHITE));
+        box.addView(text("Официальный веб-интерфейс Telegram. Вход выполняется внутри WebView; не сообщай коды входа другим людям.",12,Color.LTGRAY));
+        web=new WebView(this);
+        web.getSettings().setJavaScriptEnabled(true);
+        web.getSettings().setDomStorageEnabled(true);
+        web.getSettings().setDatabaseEnabled(true);
+        web.getSettings().setMediaPlaybackRequiresUserGesture(false);
+        web.setWebViewClient(new WebViewClient());
+        web.setWebChromeClient(new WebChromeClient());
+        web.setBackgroundColor(Color.WHITE);
+        box.addView(web,new LinearLayout.LayoutParams(-1,0,1));
+        content.addView(box,new FrameLayout.LayoutParams(-1,-1));
+        web.loadUrl("https://web.telegram.org/a/");
+    }
+    private void showWeb(boolean ai){
         LinearLayout box=column();LinearLayout row=new LinearLayout(this);
         EditText input=new EditText(this);input.setSingleLine(true);input.setTextColor(Color.WHITE);input.setHintTextColor(Color.LTGRAY);input.setTextSize(14);
         input.setHint(ai?"Задай вопрос ИИ":"Адрес сайта или поисковый запрос");input.setBackground(shape(bg,10));input.setPadding(dp(10),0,dp(10),0);
