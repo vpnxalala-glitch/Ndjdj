@@ -1,0 +1,48 @@
+name: Build TDLib for Android
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-tdlib.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-tdlib:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout TDLib build scripts
+        uses: actions/checkout@v4
+        with:
+          repository: tdlib/td
+          ref: master
+          path: tdlib-source
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build official TDLib Android package
+        working-directory: tdlib-source/example/android
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/tdlib-out"
+          docker buildx build \
+            --platform linux/amd64 \
+            --progress plain \
+            --output "type=local,dest=$GITHUB_WORKSPACE/tdlib-out" \
+            .
+
+      - name: Verify package
+        run: |
+          find tdlib-out -maxdepth 2 -type f -printf '%p %s bytes\n'
+          test -s tdlib-out/tdlib.zip
+
+      - name: Upload TDLib Android package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tdlib-android-java-jni
+          path: tdlib-out/
+          if-no-files-found: error
+          retention-days: 14
