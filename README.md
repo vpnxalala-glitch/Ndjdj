@@ -1,10 +1,10 @@
 # VichGram
 
-VichGram is an Android project with a neon cyberpunk interface and a floating assistant/browser window. The current codebase is the starting point for the planned Telegram client; Telegram account login and chat synchronization through TDLib are not yet implemented.
+VichGram is an Android project with a neon cyberpunk interface and a floating assistant/browser window. The current build includes an embedded Telegram Web entry point inside the floating window. This is a web client, not a native TDLib implementation; native Telegram API integration, background update handling, and full multi-account management remain future work.
 
 ## Current features
 - Floating overlay window with adjustable width, height, and bubble size
-- Embedded browser and web-based AI entry point
+- Embedded browser, web-based AI entry point, and Telegram Web in a floating window
 - App launcher and text/voice commands
 - Quick links to Android settings
 - Phone-number format hints and links to public search services
