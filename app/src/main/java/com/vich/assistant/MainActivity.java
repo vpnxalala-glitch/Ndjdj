@@ -1,6 +1,13 @@
 package com.vich.assistant;
 
 import android.app.Activity;
+import android.app.DownloadManager;
+import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.Settings;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -14,6 +21,17 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.core.content.FileProvider;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 import org.drinkless.tdlib.Client;
 import org.drinkless.tdlib.TdApi;
@@ -156,11 +174,134 @@ public class MainActivity extends Activity {
         apiIdField = field("API ID (число с my.telegram.org)", InputType.TYPE_CLASS_NUMBER);
         apiHashField = field("API Hash", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         phoneField = field("Номер телефона с кодом страны", InputType.TYPE_CLASS_PHONE);
+        button("Проверить обновления", this::checkForUpdates);
         button("Подключить Telegram", this::startAuthorization);
         TextView note = text("API ID и API Hash можно получить на my.telegram.org. Не отправляй их в чат и не добавляй в публичный репозиторий.", 12, MUTED, false);
         note.setLineSpacing(dp(3), 1f);
         content.addView(note);
         setStatus("Ожидание данных для подключения");
+    }
+
+
+    private static final String RELEASES_API = "https://api.github.com/repos/vpnxalala-glitch/Ndjdj/releases/latest";
+
+    private void checkForUpdates() {
+        setStatus("Проверяем обновления…");
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) new URL(RELEASES_API).openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(12000);
+                connection.setReadTimeout(15000);
+                connection.setRequestProperty("Accept", "application/vnd.github+json");
+                connection.setRequestProperty("User-Agent", "VichGram-Android");
+                int code = connection.getResponseCode();
+                if (code != 200) throw new IllegalStateException("GitHub вернул HTTP " + code);
+                StringBuilder json = new StringBuilder();
+                try (InputStream in = connection.getInputStream()) {
+                    byte[] buffer = new byte[8192];
+                    int n;
+                    while ((n = in.read(buffer)) != -1) json.append(new String(buffer, 0, n, java.nio.charset.StandardCharsets.UTF_8));
+                }
+                JSONObject release = new JSONObject(json.toString());
+                JSONArray assets = release.optJSONArray("assets");
+                String apkUrl = null;
+                if (assets != null) {
+                    for (int i = 0; i < assets.length(); i++) {
+                        JSONObject asset = assets.getJSONObject(i);
+                        if (asset.optString("name").toLowerCase(Locale.ROOT).endsWith(".apk")) {
+                            apkUrl = asset.optString("browser_download_url");
+                            break;
+                        }
+                    }
+                }
+                if (apkUrl == null || apkUrl.isEmpty()) throw new IllegalStateException("В последнем релизе пока нет APK");
+                PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+                long installedCode = Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
+                long latestCode = parseReleaseVersionCode(release.optString("tag_name"));
+                String latestName = release.optString("tag_name", "новая версия");
+                if (latestCode > 0 && latestCode <= installedCode) {
+                    runOnUiThread(() -> {
+                        setStatus("Установлена актуальная версия");
+                        toast("Обновление не требуется");
+                    });
+                    return;
+                }
+                final String downloadUrl = apkUrl;
+                runOnUiThread(() -> new android.app.AlertDialog.Builder(this)
+                    .setTitle("Доступно обновление")
+                    .setMessage("Найдена версия " + latestName + ". Скачать и установить обновление? Приложение и данные Telegram будут сохранены.")
+                    .setNegativeButton("Позже", (d, w) -> setStatus("Обновление отложено"))
+                    .setPositiveButton("Обновить", (d, w) -> downloadAndInstall(downloadUrl))
+                    .show());
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    setStatus("Не удалось проверить обновление");
+                    toast("Ошибка обновления: " + e.getMessage());
+                });
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
+    }
+
+    private long parseReleaseVersionCode(String tag) {
+        try {
+            String digits = tag.replaceAll("[^0-9]", "");
+            return Long.parseLong(digits);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private void downloadAndInstall(String url) {
+        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            Intent permission = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:" + getPackageName()));
+            startActivity(permission);
+            toast("Разреши установку неизвестных приложений, затем снова нажми «Проверить обновления».");
+            return;
+        }
+        setStatus("Скачиваем APK обновления…");
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) new URL(url).openConnection();
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(30000);
+                connection.setRequestProperty("User-Agent", "VichGram-Android");
+                File apk = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "vichgram-update.apk");
+                File parent = apk.getParentFile();
+                if (parent != null && !parent.exists() && !parent.mkdirs()) throw new IllegalStateException("Не удалось создать папку загрузки");
+                try (InputStream in = connection.getInputStream(); FileOutputStream out = new FileOutputStream(apk)) {
+                    byte[] buffer = new byte[16384];
+                    int n;
+                    while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+                }
+                if (apk.length() < 100000) throw new IllegalStateException("APK слишком маленький или скачался не полностью");
+                Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apk);
+                runOnUiThread(() -> {
+                    try {
+                        Intent install = new Intent(Intent.ACTION_VIEW);
+                        install.setDataAndType(uri, "application/vnd.android.package-archive");
+                        install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(install);
+                        setStatus("APK скачан. Подтверди установку в системном окне.");
+                    } catch (Exception e) {
+                        setStatus("Не удалось открыть установщик");
+                        toast("Ошибка установки: " + e.getMessage());
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    setStatus("Ошибка загрузки обновления");
+                    toast("Не удалось скачать APK: " + e.getMessage());
+                });
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
     }
 
     private void startAuthorization() {
