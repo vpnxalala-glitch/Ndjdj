@@ -1,5 +1,7 @@
 name: Build VichGram APK and publish release
 
+run-name: VichGram APK build #${{ github.run_number }} (${{ github.event_name }})
+
 on:
   push:
     branches: [main]
@@ -7,9 +9,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Do not cancel a long native TDLib build just because another commit is pushed.
 concurrency:
-  group: vichgram-android-build
-  cancel-in-progress: true
+  group: vichgram-android-build-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -17,10 +20,17 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - name: Checkout VichGram
         uses: actions/checkout@v4
+
+      - name: Confirm workflow started
+        run: |
+          echo "Event: $GITHUB_EVENT_NAME"
+          echo "Ref: $GITHUB_REF"
+          echo "Commit: $GITHUB_SHA"
+          git log -1 --oneline
 
       - name: Checkout official TDLib source
         uses: actions/checkout@v4
@@ -28,6 +38,11 @@ jobs:
           repository: tdlib/td
           ref: master
           path: tdlib-source
+
+      - name: Verify TDLib Android build context
+        run: |
+          test -f tdlib-source/example/android/Dockerfile
+          find tdlib-source/example/android -maxdepth 2 -type f | head -80
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -56,7 +71,9 @@ jobs:
           cp -R tdlib-unpacked/tdlib/java/org/drinkless/tdlib/. app/src/main/java/org/drinkless/tdlib/
           mkdir -p app/src/main/jniLibs
           cp -R tdlib-unpacked/tdlib/libs/. app/src/main/jniLibs/
+          echo "Native libraries:"
           find app/src/main/jniLibs -type f -printf '%p %s bytes\n'
+          echo "TDLib Java files:"
           find app/src/main/java/org/drinkless/tdlib -maxdepth 1 -type f -printf '%f\n'
 
       - name: Set up Java 17
@@ -83,8 +100,7 @@ jobs:
           gradle --version
           sdkmanager --list_installed
 
-      # Keep the same Android debug signing key between CI runs. Without this,
-      # Android refuses in-place updates because each ephemeral runner creates a new key.
+      # Keep a stable debug signing key so updates can be installed over prior builds.
       - name: Restore persistent APK signing key
         uses: actions/cache@v4
         with:
@@ -98,6 +114,7 @@ jobs:
         run: |
           test -s app/build/outputs/apk/debug/app-debug.apk
           ls -lh app/build/outputs/apk/debug/app-debug.apk
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK and build diagnostics
         if: always()
@@ -118,7 +135,7 @@ jobs:
           tag_name: vichgram-0.3.${{ github.run_number }}
           name: VichGram 0.3.${{ github.run_number }}
           body: |
-            VichGram Android debug build with the official TDLib Java/JNI libraries bundled.
-            Native Telegram sign-in and chat UI are being integrated; verify supported features in the app.
+            VichGram Android build with official TDLib Java/JNI libraries bundled.
+            APK SHA-256 is printed in the workflow log.
           prerelease: true
           files: app/build/outputs/apk/debug/app-debug.apk
