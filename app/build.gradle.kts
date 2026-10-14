@@ -10,8 +10,8 @@ android {
         applicationId = "com.vich.assistant"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "3").toInt()
+        versionName = "0.3.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
     }
 
     compileOptions {
