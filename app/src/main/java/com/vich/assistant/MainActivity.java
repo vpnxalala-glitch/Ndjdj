@@ -472,7 +472,7 @@ public class MainActivity extends Activity {
             p.useMessageDatabase = true;
             p.useSecretChats = false;
             if (BuildConfig.TELEGRAM_API_ID <= 0 || BuildConfig.TELEGRAM_API_HASH == null || BuildConfig.TELEGRAM_API_HASH.trim().isEmpty()) {
-                throw new IllegalStateException("Telegram API credentials are not configured in this build");
+                throw new IllegalStateException("Параметры подключения VichGram не настроены в этой сборке");
             }
             p.apiId = BuildConfig.TELEGRAM_API_ID;
             p.apiHash = BuildConfig.TELEGRAM_API_HASH;
@@ -507,7 +507,7 @@ public class MainActivity extends Activity {
 
     private void showCodeEntry() {
         content.removeAllViews();
-        heading("Код подтверждения", "Введи код, который Telegram отправил в приложение или SMS.");
+        heading("Код подтверждения", "Введи код подтверждения, полученный в приложении или по SMS.");
         codeField = field("Код подтверждения", InputType.TYPE_CLASS_NUMBER);
         button("Подтвердить код", () -> {
             String code = codeField.getText().toString().trim();
