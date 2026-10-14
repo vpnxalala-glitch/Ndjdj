@@ -7,23 +7,16 @@
         android:icon="@drawable/vich_avatar"
         android:roundIcon="@drawable/vich_avatar"
         android:allowBackup="true"
-        android:label="Vich"
+        android:label="VichGram"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
+        <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity
-            android:name=".VoiceCommandActivity"
-            android:exported="false"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
-        <service
-            android:name=".FloatingService"
-            android:exported="false" />
+        <activity android:name=".VoiceCommandActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <service android:name=".FloatingService" android:exported="false" />
     </application>
 </manifest>
