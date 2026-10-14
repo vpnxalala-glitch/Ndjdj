@@ -74,6 +74,16 @@ public class MainActivity extends Activity {
     private final List<TdApi.Chat> chats = new ArrayList<>();
     private final List<TdApi.Message> messages = new ArrayList<>();
 
+    // ── Главный экран: разделы, архив, закреплённые ──────────────────────
+    private static final String SECTION_ALL = "all";
+    private static final String SECTION_PRIVATE = "private";
+    private static final String SECTION_GROUP = "group";
+    private static final String SECTION_CHANNEL = "channel";
+    private static final int PINNED_LIMIT = 10;
+    private String activeSection = SECTION_ALL;
+    private boolean showingArchive = false;
+    private LinearLayout sectionTabs;
+
     private int dp(float value) {
         return (int) (value * getResources().getDisplayMetrics().density);
     }
@@ -431,19 +441,14 @@ public class MainActivity extends Activity {
                 waitingForPhoneNumber = false;
                 pendingPhone = "";
                 runOnUiThread(this::showChats);
-                client.send(new TdApi.GetChats(new TdApi.ChatListMain(), 100), this::handleResponse);
+                requestChatLists();
             } else if (state instanceof TdApi.AuthorizationStateWaitOtherDeviceConfirmation) {
                 runOnUiThread(() -> setStatus("Подтверди вход по ссылке в приложении."));
             } else if (state instanceof TdApi.AuthorizationStateClosed) {
                 runOnUiThread(() -> setStatus("Соединение с TDLib закрыто."));
             }
         } else if (update instanceof TdApi.UpdateNewChat) {
-            TdApi.Chat chat = ((TdApi.UpdateNewChat) update).chat;
-            synchronized (chats) {
-                int existing = indexOfChat(chat.id);
-                if (existing >= 0) chats.set(existing, chat); else chats.add(chat);
-            }
-            runOnUiThread(this::renderChats);
+            mergeChat(((TdApi.UpdateNewChat) update).chat);
         } else if (update instanceof TdApi.UpdateChatTitle) {
             long id = ((TdApi.UpdateChatTitle) update).chatId;
             synchronized (chats) {
@@ -451,6 +456,22 @@ public class MainActivity extends Activity {
                 if (i >= 0) chats.get(i).title = ((TdApi.UpdateChatTitle) update).title;
             }
             runOnUiThread(this::renderChats);
+        } else if (update instanceof TdApi.UpdateChatPosition) {
+            // закрепление/перемещение/архивация приходят именно этим апдейтом
+            refreshChat(((TdApi.UpdateChatPosition) update).chatId);
+        } else if (update instanceof TdApi.UpdateChatLastMessage) {
+            refreshChat(((TdApi.UpdateChatLastMessage) update).chatId);
+        } else if (update instanceof TdApi.UpdateChatReadInbox) {
+            long id = ((TdApi.UpdateChatReadInbox) update).chatId;
+            int unread = ((TdApi.UpdateChatReadInbox) update).unreadCount;
+            synchronized (chats) {
+                int i = indexOfChat(id);
+                if (i >= 0) chats.get(i).unreadCount = unread;
+            }
+            runOnUiThread(this::renderChats);
+        } else if (update instanceof TdApi.UpdateChatAddedToList
+                || update instanceof TdApi.UpdateChatRemovedFromList) {
+            requestChatLists();
         } else if (update instanceof TdApi.UpdateNewMessage) {
             TdApi.Message message = ((TdApi.UpdateNewMessage) update).message;
             if (selectedChat != null && selectedChat.id == message.chatId) {
@@ -543,16 +564,32 @@ public class MainActivity extends Activity {
         } else if (object instanceof TdApi.Chats) {
             long[] ids = ((TdApi.Chats) object).chatIds;
             for (long id : ids) client.send(new TdApi.GetChat(id), result -> {
-                if (result instanceof TdApi.Chat) {
-                    synchronized (chats) {
-                        TdApi.Chat c = (TdApi.Chat) result;
-                        int i = indexOfChat(c.id);
-                        if (i >= 0) chats.set(i, c); else chats.add(c);
-                    }
-                    runOnUiThread(this::renderChats);
-                }
+                if (result instanceof TdApi.Chat) mergeChat((TdApi.Chat) result);
             });
         }
+    }
+
+    /** Основной список + архив: chatIds приходят без данных, поэтому догружаем каждый чат. */
+    private void requestChatLists() {
+        if (client == null) return;
+        client.send(new TdApi.GetChats(new TdApi.ChatListMain(), 200), this::handleResponse);
+        client.send(new TdApi.GetChats(new TdApi.ChatListArchive(), 100), this::handleResponse);
+    }
+
+    private void mergeChat(TdApi.Chat chat) {
+        if (chat == null) return;
+        synchronized (chats) {
+            int existing = indexOfChat(chat.id);
+            if (existing >= 0) chats.set(existing, chat); else chats.add(chat);
+        }
+        runOnUiThread(this::renderChats);
+    }
+
+    private void refreshChat(long chatId) {
+        if (client == null) return;
+        client.send(new TdApi.GetChat(chatId), result -> {
+            if (result instanceof TdApi.Chat) mergeChat((TdApi.Chat) result);
+        });
     }
 
     private int indexOfChat(long id) {
@@ -564,7 +601,9 @@ public class MainActivity extends Activity {
         content.removeAllViews();
         chatSearchField = null;
         chatRows = null;
+        sectionTabs = null;
         chatQuery = "";
+        showingArchive = false;
         renderChats();
         setStatus("VichGram подключён");
     }
@@ -586,6 +625,15 @@ public class MainActivity extends Activity {
             searchLp.bottomMargin = dp(12);
             content.addView(chatSearchField, searchLp);
 
+            android.widget.HorizontalScrollView tabsScroll = new android.widget.HorizontalScrollView(this);
+            tabsScroll.setHorizontalScrollBarEnabled(false);
+            sectionTabs = new LinearLayout(this);
+            sectionTabs.setOrientation(LinearLayout.HORIZONTAL);
+            tabsScroll.addView(sectionTabs);
+            LinearLayout.LayoutParams tabsLp = new LinearLayout.LayoutParams(-1, -2);
+            tabsLp.bottomMargin = dp(12);
+            content.addView(tabsScroll, tabsLp);
+
             chatRows = new LinearLayout(this);
             chatRows.setOrientation(LinearLayout.VERTICAL);
             content.addView(chatRows, new LinearLayout.LayoutParams(-1, -2));
@@ -599,72 +647,295 @@ public class MainActivity extends Activity {
                 }
             });
         }
+        renderSectionTabs();
         renderChatRows();
     }
 
-    private android.graphics.drawable.Drawable chatRowBackground() {
+    private android.graphics.drawable.Drawable chatRowBackground(boolean pinned) {
         GradientDrawable shape = new GradientDrawable();
         boolean glass = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_GLASS, false);
         shape.setCornerRadius(dp(glass ? 24 : 16));
-        shape.setColor(glass ? Color.argb(150, 17, 25, 43) : PANEL);
-        shape.setStroke(dp(glass ? 1 : 1), glass ? Color.argb(210, 44, 218, 220) : Color.rgb(34, 51, 76));
+        if (glass) {
+            shape.setColor(pinned ? Color.argb(178, 17, 25, 43) : Color.argb(150, 17, 25, 43));
+            shape.setStroke(dp(pinned ? 2 : 1), pinned ? CYAN : Color.argb(210, 44, 218, 220));
+        } else {
+            shape.setColor(pinned ? Color.rgb(22, 34, 52) : PANEL);
+            shape.setStroke(dp(pinned ? 2 : 1), pinned ? CYAN : Color.rgb(34, 51, 76));
+        }
         return shape;
+    }
+
+    // ── Разделы «Все чаты / Личные / Группы / Каналы» ────────────────────
+
+    private void renderSectionTabs() {
+        if (sectionTabs == null) return;
+        sectionTabs.removeAllViews();
+        addSectionChip("Все чаты", SECTION_ALL);
+        addSectionChip("Личные", SECTION_PRIVATE);
+        addSectionChip("Группы", SECTION_GROUP);
+        addSectionChip("Каналы", SECTION_CHANNEL);
+    }
+
+    private void addSectionChip(String label, String section) {
+        boolean active = section.equals(activeSection) && !showingArchive;
+        TextView chip = text(label, 13, active ? BG : WHITE, active);
+        chip.setSingleLine(true);
+        chip.setGravity(Gravity.CENTER);
+        chip.setPadding(dp(14), dp(9), dp(14), dp(9));
+        chip.setBackground(rounded(active ? CYAN : Color.rgb(23, 34, 55), active ? 0 : Color.rgb(44, 63, 91)));
+        chip.setOnClickListener(v -> {
+            if (section.equals(activeSection) && !showingArchive) return;
+            activeSection = section;
+            showingArchive = false;
+            renderSectionTabs();
+            renderChatRows();
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.rightMargin = dp(8);
+        sectionTabs.addView(chip, lp);
+    }
+
+    // ── Категория чата: личный / группа / канал ──────────────────────────
+
+    private String sectionOf(TdApi.Chat chat) {
+        if (chat.type instanceof TdApi.ChatTypePrivate || chat.type instanceof TdApi.ChatTypeSecret) {
+            return SECTION_PRIVATE;
+        }
+        if (chat.type instanceof TdApi.ChatTypeBasicGroup) return SECTION_GROUP;
+        if (chat.type instanceof TdApi.ChatTypeSupergroup) {
+            return ((TdApi.ChatTypeSupergroup) chat.type).isChannel ? SECTION_CHANNEL : SECTION_GROUP;
+        }
+        return SECTION_PRIVATE;
+    }
+
+    /** В архиве ли чат — по chatLists, с запасной проверкой по positions. */
+    private boolean isArchived(TdApi.Chat chat) {
+        if (chat.chatLists != null) {
+            for (TdApi.ChatList list : chat.chatLists) {
+                if (list instanceof TdApi.ChatListArchive) return true;
+            }
+        }
+        if (chat.positions != null) {
+            for (TdApi.ChatPosition position : chat.positions) {
+                if (position.list instanceof TdApi.ChatListArchive) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Закреплён ли чат именно в том списке, где мы его показываем. */
+    private boolean isPinned(TdApi.Chat chat) {
+        if (chat.positions == null) return false;
+        boolean archived = isArchived(chat);
+        for (TdApi.ChatPosition position : chat.positions) {
+            if (!position.isPinned || position.list == null) continue;
+            if (position.list instanceof TdApi.ChatListArchive && archived) return true;
+            if (position.list instanceof TdApi.ChatListMain && !archived) return true;
+        }
+        return false;
+    }
+
+    /** Порядок TDLib (order), с откатом на дату последнего сообщения. */
+    private long chatSortKey(TdApi.Chat chat) {
+        long order = 0;
+        if (chat.positions != null) {
+            for (TdApi.ChatPosition position : chat.positions) {
+                if (position.order > order) order = position.order;
+            }
+        }
+        if (order != 0) return order;
+        return chat.lastMessage == null ? 0 : chat.lastMessage.date;
+    }
+
+    private void sortChats(List<TdApi.Chat> list) {
+        Collections.sort(list, (a, b) -> Long.compare(chatSortKey(b), chatSortKey(a)));
+    }
+
+    private String chatTitle(TdApi.Chat chat) {
+        return chat.title == null || chat.title.trim().isEmpty() ? "Диалог" : chat.title;
+    }
+
+    private boolean matchesQuery(TdApi.Chat chat) {
+        if (chatQuery.isEmpty()) return true;
+        if (chatTitle(chat).toLowerCase(Locale.ROOT).contains(chatQuery)) return true;
+        String preview = chat.lastMessage == null ? "" : messagePreview(chat.lastMessage);
+        return preview.toLowerCase(Locale.ROOT).contains(chatQuery);
+    }
+
+    private View chatRowView(TdApi.Chat chat, boolean pinned) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(dp(15), dp(12), dp(15), dp(12));
+        row.setBackground(chatRowBackground(pinned));
+
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        TextView name = text((pinned ? "📌 " : "") + chatTitle(chat), 15, WHITE, true);
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        top.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+        if (chat.unreadCount > 0) {
+            TextView badge = text(String.valueOf(chat.unreadCount), 11, BG, true);
+            badge.setGravity(Gravity.CENTER);
+            badge.setPadding(dp(9), dp(2), dp(9), dp(2));
+            badge.setBackground(rounded(CYAN, 0));
+            top.addView(badge);
+        }
+        row.addView(top);
+
+        String preview = chat.lastMessage == null ? "Нет сообщений" : messagePreview(chat.lastMessage);
+        TextView sub = text(preview, 13, MUTED, false);
+        sub.setSingleLine(true);
+        sub.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(-1, -2);
+        subLp.topMargin = dp(3);
+        row.addView(sub, subLp);
+
+        row.setOnClickListener(v -> openChat(chat));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.bottomMargin = dp(9);
+        row.setLayoutParams(lp);
+        return row;
+    }
+
+    private View sectionLabel(String value) {
+        TextView label = text(value, 12, CYAN, true);
+        label.setPadding(dp(4), dp(2), dp(4), dp(8));
+        return label;
+    }
+
+    private View archiveRowView(int count) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(15), dp(14), dp(15), dp(14));
+        row.setBackground(rounded(PANEL, Color.rgb(34, 51, 76)));
+        TextView label = text("Архив", 15, WHITE, true);
+        row.addView(label, new LinearLayout.LayoutParams(0, -2, 1));
+        row.addView(text(count + "  ›", 13, CYAN, true));
+        row.setOnClickListener(v -> {
+            showingArchive = true;
+            renderSectionTabs();
+            renderChatRows();
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.bottomMargin = dp(9);
+        row.setLayoutParams(lp);
+        return row;
+    }
+
+    private View archiveHeader(int count) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setPadding(dp(4), dp(2), dp(4), dp(10));
+        TextView back = text("‹ Назад", 14, CYAN, true);
+        back.setOnClickListener(v -> {
+            showingArchive = false;
+            renderSectionTabs();
+            renderChatRows();
+        });
+        box.addView(back);
+        TextView title = text("Архив · " + count, 16, WHITE, true);
+        title.setPadding(dp(14), 0, 0, 0);
+        box.addView(title);
+        return box;
+    }
+
+    private int renderChatList(List<TdApi.Chat> source, boolean pinned) {
+        int shown = 0;
+        for (TdApi.Chat chat : source) {
+            if (!matchesQuery(chat)) continue;
+            chatRows.addView(chatRowView(chat, pinned));
+            shown++;
+        }
+        return shown;
+    }
+
+    private String sectionLabelForActive() {
+        if (SECTION_PRIVATE.equals(activeSection)) return "ЛИЧНЫЕ";
+        if (SECTION_GROUP.equals(activeSection)) return "ГРУППЫ";
+        if (SECTION_CHANNEL.equals(activeSection)) return "КАНАЛЫ";
+        return "ВСЕ ЧАТЫ";
     }
 
     private void renderChatRows() {
         if (chatRows == null) return;
         chatRows.removeAllViews();
-        int shown = 0;
+
+        List<TdApi.Chat> mainList = new ArrayList<>();
+        List<TdApi.Chat> archiveList = new ArrayList<>();
         synchronized (chats) {
-            List<TdApi.Chat> sortedChats = new ArrayList<>(chats);
-            Collections.sort(sortedChats, (a, b) -> {
-                int da = a.lastMessage == null ? 0 : a.lastMessage.date;
-                int db = b.lastMessage == null ? 0 : b.lastMessage.date;
-                return Integer.compare(db, da);
-            });
-            for (int i = 0; i < sortedChats.size(); i++) {
-                final TdApi.Chat chat = sortedChats.get(i);
-                String label = chat.title == null || chat.title.trim().isEmpty() ? "Диалог" : chat.title;
-                String preview = chat.lastMessage == null ? "Открыть диалог" : messagePreview(chat.lastMessage);
-                if (!chatQuery.isEmpty()
-                    && !label.toLowerCase(Locale.ROOT).contains(chatQuery)
-                    && !preview.toLowerCase(Locale.ROOT).contains(chatQuery)) {
-                    continue;
-                }
-                String unread = chat.unreadCount > 0 ? chat.unreadCount + " новых · " : "";
-                TextView row = text(label + "\n" + unread + preview, 15, WHITE, true);
-                row.setMaxLines(3);
-                row.setPadding(dp(15), dp(14), dp(15), dp(14));
-                row.setBackground(chatRowBackground());
-                row.setOnClickListener(v -> openChat(chat));
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-                lp.bottomMargin = dp(9);
-                chatRows.addView(row, lp);
-                shown++;
+            for (TdApi.Chat chat : chats) {
+                if (isArchived(chat)) archiveList.add(chat); else mainList.add(chat);
             }
         }
-        if (shown == 0) {
-            String message = chats.isEmpty()
-                ? "Пока нет загруженных диалогов. Проверь соединение и обнови список."
-                : "По этому запросу ничего не найдено.";
-            TextView empty = text(message, 13, MUTED, false);
-            empty.setLineSpacing(dp(3), 1f);
-            empty.setPadding(dp(6), dp(14), dp(6), dp(14));
-            chatRows.addView(empty);
-            if (chats.isEmpty()) {
-                Button refresh = new Button(this);
-                refresh.setText("Обновить список чатов");
-                refresh.setAllCaps(false);
-                refresh.setTextColor(BG);
-                refresh.setBackground(rounded(CYAN, 0));
-                refresh.setOnClickListener(v -> {
-                    if (client != null) client.send(new TdApi.GetChats(new TdApi.ChatListMain(), 100), this::handleResponse);
-                    setStatus("Обновляем список чатов…");
-                });
-                LinearLayout.LayoutParams refreshLp = new LinearLayout.LayoutParams(-1, dp(48));
-                refreshLp.topMargin = dp(8);
-                chatRows.addView(refresh, refreshLp);
+        sortChats(mainList);
+        sortChats(archiveList);
+
+        int shown;
+        if (showingArchive) {
+            chatRows.addView(archiveHeader(archiveList.size()));
+            shown = renderChatList(archiveList, true);
+        } else {
+            // строка «Архив» — только если архив не пуст
+            if (SECTION_ALL.equals(activeSection) && !archiveList.isEmpty()) {
+                chatRows.addView(archiveRowView(archiveList.size()));
             }
+            List<TdApi.Chat> visible = new ArrayList<>();
+            for (TdApi.Chat chat : mainList) {
+                if (SECTION_ALL.equals(activeSection) || activeSection.equals(sectionOf(chat))) {
+                    visible.add(chat);
+                }
+            }
+            List<TdApi.Chat> pinnedChats = new ArrayList<>();
+            List<TdApi.Chat> regularChats = new ArrayList<>();
+            for (TdApi.Chat chat : visible) {
+                if (isPinned(chat) && pinnedChats.size() < PINNED_LIMIT) pinnedChats.add(chat);
+                else regularChats.add(chat);
+            }
+            shown = 0;
+            if (!pinnedChats.isEmpty()) {
+                chatRows.addView(sectionLabel("ЗАКРЕПЛЁННЫЕ · " + pinnedChats.size()));
+                shown += renderChatList(pinnedChats, true);
+            }
+            if (!regularChats.isEmpty()) {
+                if (!pinnedChats.isEmpty()) chatRows.addView(sectionLabel(sectionLabelForActive()));
+                shown += renderChatList(regularChats, false);
+            }
+        }
+        if (shown == 0) addEmptyNote(showingArchive);
+    }
+
+    private void addEmptyNote(boolean archive) {
+        String message;
+        if (!chatQuery.isEmpty()) {
+            message = "По этому запросу ничего не найдено.";
+        } else if (archive) {
+            message = "В архиве пока нет чатов.";
+        } else if (chats.isEmpty()) {
+            message = "Пока нет загруженных диалогов. Проверь соединение и обнови список.";
+        } else {
+            message = "В этом разделе пока нет чатов.";
+        }
+        TextView empty = text(message, 13, MUTED, false);
+        empty.setLineSpacing(dp(3), 1f);
+        empty.setPadding(dp(6), dp(14), dp(6), dp(14));
+        chatRows.addView(empty);
+        if (chats.isEmpty() && !archive) {
+            Button refresh = new Button(this);
+            refresh.setText("Обновить список чатов");
+            refresh.setAllCaps(false);
+            refresh.setTextColor(BG);
+            refresh.setBackground(rounded(CYAN, 0));
+            refresh.setOnClickListener(v -> {
+                requestChatLists();
+                setStatus("Обновляем список чатов…");
+            });
+            LinearLayout.LayoutParams refreshLp = new LinearLayout.LayoutParams(-1, dp(48));
+            refreshLp.topMargin = dp(8);
+            chatRows.addView(refresh, refreshLp);
         }
     }
 
@@ -798,7 +1069,7 @@ public class MainActivity extends Activity {
                         showSettingsInfo("Уведомления и звуки", "Панель уведомлений VichGram будет подключена отдельным этапом.");
                         break;
                     case 5:
-                        showSettingsInfo("Папки чатов", "Чаты сейчас показаны единым списком по времени последнего сообщения — без разделения на чаты, группы и каналы.");
+                        showSettingsInfo("Папки чатов", "Чаты разделены на разделы «Все чаты», «Личные», «Группы» и «Каналы». Архив показывается отдельной строкой над закреплёнными и только когда он не пуст.");
                         break;
                     case 6:
                         showSettingsInfo("VichGram Premium", "Раздел Premium. Здесь будут отображаться возможности подписки, доступные вашему аккаунту.");
