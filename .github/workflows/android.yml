@@ -47,6 +47,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # The upstream Dockerfile uses ADD against the GitHub API only to invalidate
+      # Docker's cache. BuildKit receives HTTP 403 for that endpoint in this runner.
+      # Remove that cache-buster and pass the checked-out TDLib SHA as COMMIT_HASH.
+      - name: Prepare TDLib Docker build
+        run: |
+          sed -i '/^ADD "https:\/\/api.github.com\/repos\/tdlib\/td\/git\/refs\/heads\/master" version.json$/d' tdlib-source/example/android/Dockerfile
+          echo "Pinned TDLib commit: $(git -C tdlib-source rev-parse HEAD)"
+          ! grep -F 'api.github.com/repos/tdlib/td/git/refs/heads/master' tdlib-source/example/android/Dockerfile
+
       - name: Build TDLib Android Java/JNI package
         working-directory: tdlib-source/example/android
         run: |
@@ -54,6 +63,7 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --progress plain \
+            --build-arg "COMMIT_HASH=$(git -C "$GITHUB_WORKSPACE/tdlib-source" rev-parse HEAD)" \
             --cache-from type=gha,scope=tdlib-android \
             --cache-to type=gha,mode=max,scope=tdlib-android \
             --output "type=local,dest=$GITHUB_WORKSPACE/tdlib-out" \
