@@ -401,8 +401,6 @@ public class MainActivity extends Activity {
             p.deviceModel = android.os.Build.MODEL;
             p.systemVersion = android.os.Build.VERSION.RELEASE;
             p.applicationVersion = "0.3.0";
-            p.enableStorageOptimizer = true;
-            p.ignoreFileNames = false;
             parametersSent = true;
             client.send(p, this::handleResponse);
         } catch (Throwable e) {
