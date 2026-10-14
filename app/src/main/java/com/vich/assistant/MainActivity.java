@@ -9,6 +9,9 @@ import android.os.Build;
 import android.os.Environment;
 import android.provider.Settings;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -21,6 +24,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -55,6 +59,11 @@ public class MainActivity extends Activity {
     private TextView status;
     private EditText phoneField, codeField, passwordField, chatSearchField;
     private LinearLayout chatRows;
+    private ScrollView scrollView;
+    private static final int PICK_WALLPAPER = 702;
+    private static final String PREFS = "vichgram_appearance";
+    private static final String PREF_GLASS = "glass_chats";
+    private static final String PREF_WALLPAPER = "wallpaper_uri";
     private String chatQuery = "";
     private boolean parametersSent;
     private boolean waitingForPhoneNumber;
@@ -121,6 +130,11 @@ public class MainActivity extends Activity {
         brand.addView(title);
         brand.addView(subtitle);
         header.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView settings = text("⚙", 22, CYAN, true);
+        settings.setContentDescription("Настройки оформления");
+        settings.setPadding(dp(12), dp(4), dp(8), dp(4));
+        settings.setOnClickListener(v -> openAppearanceSettings());
+        header.addView(settings);
         TextView dot = text("↻", 22, CYAN, true);
         dot.setContentDescription("Проверить обновления");
         dot.setPadding(dp(12), dp(4), dp(2), dp(4));
@@ -132,13 +146,14 @@ public class MainActivity extends Activity {
         status.setPadding(dp(18), dp(10), dp(18), dp(10));
         root.addView(status);
 
-        ScrollView scroll = new ScrollView(this);
+        scrollView = new ScrollView(this);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(16), dp(8), dp(16), dp(24));
-        scroll.setFillViewport(true);
-        scroll.addView(content);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        scrollView.setFillViewport(true);
+        scrollView.addView(content);
+        root.addView(scrollView, new LinearLayout.LayoutParams(-1, 0, 1));
+        applyWallpaper();
 
         TextView footer = text("VichGram • Telegram через официальный TDLib", 10, MUTED, false);
         footer.setGravity(Gravity.CENTER);
@@ -595,6 +610,15 @@ public class MainActivity extends Activity {
         renderChatRows();
     }
 
+    private android.graphics.drawable.Drawable chatRowBackground() {
+        GradientDrawable shape = new GradientDrawable();
+        boolean glass = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_GLASS, false);
+        shape.setCornerRadius(dp(glass ? 24 : 16));
+        shape.setColor(glass ? Color.argb(150, 17, 25, 43) : PANEL);
+        shape.setStroke(dp(glass ? 1 : 1), glass ? Color.argb(210, 44, 218, 220) : Color.rgb(34, 51, 76));
+        return shape;
+    }
+
     private void renderChatRows() {
         if (chatRows == null) return;
         chatRows.removeAllViews();
@@ -613,7 +637,7 @@ public class MainActivity extends Activity {
                 TextView row = text(label + "\n" + unread + preview, 15, WHITE, true);
                 row.setMaxLines(3);
                 row.setPadding(dp(15), dp(14), dp(15), dp(14));
-                row.setBackground(rounded(PANEL, Color.rgb(34, 51, 76)));
+                row.setBackground(chatRowBackground());
                 row.setOnClickListener(v -> openChat(chat));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
                 lp.bottomMargin = dp(9);
@@ -739,6 +763,87 @@ public class MainActivity extends Activity {
         if (message.content instanceof TdApi.MessageVideo) return "▶ Видео";
         if (message.content instanceof TdApi.MessageDocument) return "📎 Файл";
         return "Сообщение";
+    }
+
+    private void openAppearanceSettings() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(20), dp(8), dp(20), dp(4));
+        Switch glassSwitch = new Switch(this);
+        glassSwitch.setText("Стеклянные чаты");
+        glassSwitch.setTextColor(WHITE);
+        glassSwitch.setTextSize(15);
+        glassSwitch.setChecked(getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_GLASS, false));
+        glassSwitch.setPadding(0, dp(8), 0, dp(8));
+        panel.addView(glassSwitch);
+        TextView hint = text("Включи, чтобы карточки диалогов стали полупрозрачными, с бирюзовой обводкой и пузырчатыми углами. Выключи — вернётся обычный вид.", 12, MUTED, false);
+        hint.setLineSpacing(dp(2), 1f);
+        panel.addView(hint);
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("Оформление VichGram")
+            .setView(panel)
+            .setPositiveButton("Обои чатов", (dialog, which) -> pickWallpaper())
+            .setNeutralButton("Убрать обои", (dialog, which) -> clearWallpaper())
+            .setNegativeButton("Готово", (dialog, which) -> {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_GLASS, glassSwitch.isChecked()).apply();
+                renderChatRows();
+                setStatus(glassSwitch.isChecked() ? "Стеклянные чаты включены" : "Обычный вид чатов");
+            })
+            .show();
+    }
+
+    private void pickWallpaper() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("image/*");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+            startActivityForResult(intent, PICK_WALLPAPER);
+        } catch (Exception e) {
+            toast("Не удалось открыть выбор обоев: " + e.getMessage());
+        }
+    }
+
+    private void clearWallpaper() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(PREF_WALLPAPER).apply();
+        if (scrollView != null) scrollView.setBackgroundColor(BG);
+        setStatus("Обои убраны");
+        toast("Установлен стандартный фон");
+    }
+
+    private void applyWallpaper() {
+        if (scrollView == null) return;
+        String saved = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_WALLPAPER, "");
+        if (saved == null || saved.isEmpty()) {
+            scrollView.setBackgroundColor(BG);
+            return;
+        }
+        try (InputStream in = getContentResolver().openInputStream(Uri.parse(saved))) {
+            Bitmap bitmap = BitmapFactory.decodeStream(in);
+            if (bitmap != null) {
+                BitmapDrawable wallpaper = new BitmapDrawable(getResources(), bitmap);
+                wallpaper.setAlpha(105);
+                wallpaper.setGravity(Gravity.FILL);
+                scrollView.setBackground(wallpaper);
+                content.setBackgroundColor(Color.TRANSPARENT);
+            }
+        } catch (Exception e) {
+            android.util.Log.w("VichGram", "Не удалось применить обои", e);
+            scrollView.setBackgroundColor(BG);
+        }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != PICK_WALLPAPER || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        try {
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (Exception ignored) { }
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_WALLPAPER, uri.toString()).apply();
+        applyWallpaper();
+        setStatus("Обои применены");
+        toast("Обои чатов обновлены");
     }
 
     private void setStatus(String value) {
