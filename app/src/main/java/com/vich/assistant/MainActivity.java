@@ -51,8 +51,8 @@ public class MainActivity extends Activity {
     private LinearLayout root;
     private LinearLayout content;
     private TextView status;
-    private EditText apiIdField, apiHashField, phoneField, codeField, passwordField;
-    private String apiId = "", apiHash = "";
+    private EditText phoneField, codeField, passwordField;
+    private String apiId = BuildConfig.TELEGRAM_API_ID, apiHash = BuildConfig.TELEGRAM_API_HASH;
     private boolean parametersSent;
     private TdApi.Chat selectedChat;
     private EditText messageField;
@@ -172,13 +172,11 @@ public class MainActivity extends Activity {
 
     private void showWelcome() {
         content.removeAllViews();
-        heading("Твой Telegram, по-новому", "Нативный интерфейс VichGram. Для входа нужны API credentials Telegram — они вводятся только на устройстве.");
-        apiIdField = field("API ID (число с my.telegram.org)", InputType.TYPE_CLASS_NUMBER);
-        apiHashField = field("API Hash", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        heading("VichGram", "Твои чаты и сообщения в одном месте. Войди по номеру телефона и коду Telegram.");
         phoneField = field("Номер телефона с кодом страны", InputType.TYPE_CLASS_PHONE);
         button("Проверить обновления", this::checkForUpdates);
         button("Подключить Telegram", this::startAuthorization);
-        TextView note = text("API ID и API Hash можно получить на my.telegram.org. Не отправляй их в чат и не добавляй в публичный репозиторий.", 12, MUTED, false);
+        TextView note = text("Код подтверждения вводится только в приложении. Если включена двухэтапная проверка, Telegram дополнительно попросит облачный пароль.", 12, MUTED, false);
         note.setLineSpacing(dp(3), 1f);
         content.addView(note);
         setStatus("Ожидание данных для подключения");
@@ -312,11 +310,16 @@ public class MainActivity extends Activity {
     }
 
     private void startAuthorization() {
-        apiId = apiIdField.getText().toString().trim();
-        apiHash = apiHashField.getText().toString().trim();
+        apiId = BuildConfig.TELEGRAM_API_ID.trim();
+        apiHash = BuildConfig.TELEGRAM_API_HASH.trim();
         String phone = phoneField.getText().toString().trim();
-        if (apiId.isEmpty() || apiHash.isEmpty() || phone.isEmpty()) {
-            toast("Заполни API ID, API Hash и номер телефона");
+        if (apiId.isEmpty() || apiHash.isEmpty()) {
+            toast("В сборке не настроены данные приложения Telegram. Разработчику нужно добавить TELEGRAM_API_ID и TELEGRAM_API_HASH в GitHub Secrets.");
+            setStatus("Не настроена конфигурация Telegram");
+            return;
+        }
+        if (phone.isEmpty()) {
+            toast("Введи номер телефона с кодом страны");
             return;
         }
         try {
