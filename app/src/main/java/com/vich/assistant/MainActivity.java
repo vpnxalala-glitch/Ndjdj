@@ -774,6 +774,10 @@ public class MainActivity extends Activity {
         glassSwitch.setTextColor(WHITE);
         glassSwitch.setTextSize(15);
         glassSwitch.setChecked(getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_GLASS, false));
+        glassSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_GLASS, checked).apply();
+            renderChatRows();
+        });
         glassSwitch.setPadding(0, dp(8), 0, dp(8));
         panel.addView(glassSwitch);
         TextView hint = text("Включи, чтобы карточки диалогов стали полупрозрачными, с бирюзовой обводкой и пузырчатыми углами. Выключи — вернётся обычный вид.", 12, MUTED, false);
