@@ -29,7 +29,7 @@ public class MainActivity extends Activity {
         TextView title = new TextView(this); title.setText("VichGram"); title.setTextSize(34); title.setTypeface(null,Typeface.BOLD); title.setTextColor(Color.WHITE); page.addView(title);
         TextView sub = new TextView(this); sub.setText("Твой киберпанк-интерфейс для Android"); sub.setTextSize(16); sub.setTextColor(Color.rgb(184,197,220)); sub.setPadding(0,dp(4),0,dp(22)); page.addView(sub);
         TextView status = new TextView(this); status.setText("●  NEON MODE   •   FLOATING UI"); status.setTextSize(12); status.setTextColor(accent); status.setPadding(dp(12),dp(12),dp(12),dp(12)); status.setBackground(shape(card)); LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.bottomMargin=dp(16);page.addView(status,sp);
-        page.addView(card("🤖","ИИ-ассистент","Открыть веб-помощника в отдельном плавающем окне.", "Открыть ИИ", () -> launchTab("ai")));
+        page.addView(card("✈","Telegram","Открыть Telegram Web в плавающем окне и войти в аккаунт.", "Открыть Telegram", () -> launchTab("telegram")));\n        page.addView(card("🤖","ИИ-ассистент","Открыть веб-помощника в отдельном плавающем окне.", "Открыть ИИ", () -> launchTab("ai")));
         page.addView(card("🎯","Командный помощник","Текстовые и голосовые команды для приложений и настроек.", "Ввести команду", () -> launchTab("commands")));
         page.addView(card("📱","Приложения","Поиск среди установленных приложений и запуск одним нажатием.", "Выбрать приложение", () -> launchTab("apps")));
         page.addView(card("🌐","Браузер","Встроенный браузер в окне с настраиваемым размером.", "Открыть браузер", () -> launchTab("browser")));
