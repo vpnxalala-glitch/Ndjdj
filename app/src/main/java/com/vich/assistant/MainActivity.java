@@ -250,7 +250,7 @@ public class MainActivity extends Activity {
 
     private long parseReleaseVersionCode(String tag) {
         try {
-            String digits = tag.replaceFirst("^.*\\\\.", "").replaceAll("[^0-9]", "");
+            String digits = tag.replaceFirst("^.*\\.", "").replaceAll("[^0-9]", "");
             return Long.parseLong(digits);
         } catch (Exception e) {
             return -1;
