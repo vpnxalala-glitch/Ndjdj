@@ -81,7 +81,7 @@ public class FloatingService extends Service {
         head.addView(btn("—",()->collapse()),new LinearLayout.LayoutParams(dp(42),dp(42)));
         head.addView(btn("×",()->stopSelf()),new LinearLayout.LayoutParams(dp(42),dp(42)));head.setOnTouchListener(this::drag);
         LinearLayout nav=new LinearLayout(this);nav.setGravity(Gravity.CENTER);
-        String[][] tabs={{"Меню","menu"},{"ИИ","ai"},{"Команды","commands"},{"Приложения","apps"},{"Веб","browser"}};
+        String[][] tabs={{"Меню","menu"},{"Telegram","telegram"},{"ИИ","ai"},{"Команды","commands"},{"Веб","browser"}};
         for(String[] t:tabs){TextView b=btn(t[0],()->showTab(t[1]));nav.addView(b,new LinearLayout.LayoutParams(0,dp(42),1));}
         content=new FrameLayout(this);content.setBackground(shape(surface,14));content.setClipToOutline(true);
         root.addView(head);root.addView(nav,new LinearLayout.LayoutParams(-1,dp(46)));root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
@@ -93,13 +93,14 @@ public class FloatingService extends Service {
     private void showTab(String tab){
         activeTab=tab;if(web!=null){try{web.stopLoading();web.destroy();}catch(Exception ignored){}web=null;}
         if(content==null)return;content.removeAllViews();
-        if("menu".equals(tab))showMenu();else if("sizes".equals(tab))showSizes();else if("osint".equals(tab))showOpenSearch();else if("ai".equals(tab))showWeb(true);else if("browser".equals(tab))showWeb(false);else if("apps".equals(tab))showApps();else if("commands".equals(tab))showCommands();else showTools();
+        if("menu".equals(tab))showMenu();else if("sizes".equals(tab))showSizes();else if("osint".equals(tab))showOpenSearch();else if("ai".equals(tab))showWeb(true);else if("browser".equals(tab))showWeb(false);else if("telegram".equals(tab))showTelegram();else if("apps".equals(tab))showApps();else if("commands".equals(tab))showCommands();else showTools();
     }
     private void showMenu(){
         LinearLayout list=column();list.addView(text("Чем займёмся?",24,Color.WHITE));list.addView(text("Выбери функцию — браузер сам не откроется.",14,Color.LTGRAY));
         addMenuCard(list,"🤖 ИИ-ассистент","Задать вопрос через ChatGPT","ai");
         addMenuCard(list,"🎯 Командный помощник","Напиши «открой YouTube» или «найди рецепт»","commands");
         addMenuCard(list,"📱 Запуск приложений","Поиск установленных приложений","apps");
+        addMenuCard(list,"✈ Telegram Web","Официальный веб-клиент Telegram: войди по QR-коду или номеру телефона","telegram");
         addMenuCard(list,"🌐 Браузер","Сайты и поиск","browser");
         addMenuCard(list,"🧰 Быстрые настройки","Wi-Fi, Bluetooth, звук и настройки Android","tools");
         addMenuCard(list,"📐 Размеры пузыря и окна","Настрой ширину и высоту окна, размер плавающего пузыря","sizes");
@@ -212,7 +213,7 @@ public class FloatingService extends Service {
         TextView d=text(desc,13,Color.LTGRAY);d.setPadding(0,dp(5),0,dp(8));c.addView(d);c.setOnClickListener(v->showTab(tab));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(10);parent.addView(c,lp);
     }
-    private void showWeb(boolean ai){
+    private void showTelegram(){\n        LinearLayout box=column();\n        box.addView(text("Telegram Web",20,Color.WHITE));\n        box.addView(text("Войди через официальный веб-интерфейс. Сессия хранится в данных WebView на устройстве. Не вводи код входа в сторонние окна.",12,Color.LTGRAY));\n        web=new WebView(this);\n        web.getSettings().setJavaScriptEnabled(true);\n        web.getSettings().setDomStorageEnabled(true);\n        web.getSettings().setDatabaseEnabled(true);\n        web.getSettings().setMediaPlaybackRequiresUserGesture(false);\n        web.setWebViewClient(new WebViewClient());\n        web.setWebChromeClient(new WebChromeClient());\n        web.setBackgroundColor(Color.WHITE);\n        box.addView(web,new LinearLayout.LayoutParams(-1,0,1));\n        content.addView(box,new FrameLayout.LayoutParams(-1,-1));\n        web.loadUrl("https://web.telegram.org/a/");\n    }\n    private void showWeb(boolean ai){
         LinearLayout box=column();LinearLayout row=new LinearLayout(this);
         EditText input=new EditText(this);input.setSingleLine(true);input.setTextColor(Color.WHITE);input.setHintTextColor(Color.LTGRAY);input.setTextSize(14);
         input.setHint(ai?"Задай вопрос ИИ":"Адрес сайта или поисковый запрос");input.setBackground(shape(bg,10));input.setPadding(dp(10),0,dp(10),0);
