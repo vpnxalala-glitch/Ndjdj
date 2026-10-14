@@ -16,6 +16,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   build:
@@ -92,7 +93,16 @@ jobs:
           key: vichgram-debug-signing-key-v1
 
       - name: Build APK with TDLib
-        run: gradle --no-daemon --stacktrace --warning-mode all assembleDebug
+        env:
+          VICHGRAM_TG_API_ID: ${{ secrets.VICHGRAM_TG_API_ID }}
+          VICHGRAM_TG_API_HASH: ${{ secrets.VICHGRAM_TG_API_HASH }}
+        run: |
+          if [ -z "$VICHGRAM_TG_API_ID" ] || [ -z "$VICHGRAM_TG_API_HASH" ]; then
+            echo "::warning::Telegram API secrets are not configured. The APK will build, but new-user login will remain disabled until VICHGRAM_TG_API_ID and VICHGRAM_TG_API_HASH are configured."
+          else
+            echo "Telegram app credentials are configured."
+          fi
+          gradle --no-daemon --stacktrace --warning-mode all assembleDebug
 
       - name: Verify APK
         run: |
