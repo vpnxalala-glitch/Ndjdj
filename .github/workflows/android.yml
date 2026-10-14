@@ -1,4 +1,4 @@
-name: Build APK and publish release
+name: Build VichGram APK and publish release
 
 on:
   push:
@@ -45,11 +45,16 @@ jobs:
       - name: Build APK
         run: gradle --no-daemon --stacktrace --warning-mode all assembleDebug
 
-      - name: Upload build diagnostics and APK
+      - name: Verify APK
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK and build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Vich-build-diagnostics
+          name: VichGram-apk-and-diagnostics
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/reports/
@@ -58,11 +63,15 @@ jobs:
           retention-days: 14
 
       - name: Publish release
-        if: success()
+        if: success() && github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.${{ github.run_number }}
-          name: Vich v0.1.${{ github.run_number }}
-          body: "Тестовая debug-сборка Vich."
+          tag_name: vichgram-0.2.${{ github.run_number }}
+          name: VichGram 0.2.${{ github.run_number }}
+          body: |
+            VichGram Android debug build.
+
+            This release contains the current neon interface and floating assistant/browser tools.
+            Telegram account login and chat synchronization through TDLib are not yet implemented.
           prerelease: true
           files: app/build/outputs/apk/debug/app-debug.apk
