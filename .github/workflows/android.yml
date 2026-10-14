@@ -83,6 +83,14 @@ jobs:
           gradle --version
           sdkmanager --list_installed
 
+      # Keep the same Android debug signing key between CI runs. Without this,
+      # Android refuses in-place updates because each ephemeral runner creates a new key.
+      - name: Restore persistent APK signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: vichgram-debug-signing-key-v1
+
       - name: Build APK with TDLib
         run: gradle --no-daemon --stacktrace --warning-mode all assembleDebug
 
