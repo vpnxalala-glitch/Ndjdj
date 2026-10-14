@@ -57,6 +57,7 @@ public class MainActivity extends Activity {
     private LinearLayout chatRows;
     private String chatQuery = "";
     private boolean parametersSent;
+    private boolean waitingForPhoneNumber;
     private TdApi.Chat selectedChat;
     private EditText messageField;
     private final List<TdApi.Chat> chats = new ArrayList<>();
@@ -80,6 +81,28 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
         buildShell();
         showWelcome();
+        initializeTdlibIfConfigured();
+    }
+
+    private boolean hasTelegramCredentials() {
+        return BuildConfig.TELEGRAM_API_ID > 0
+            && BuildConfig.TELEGRAM_API_HASH != null
+            && !BuildConfig.TELEGRAM_API_HASH.trim().isEmpty();
+    }
+
+    private void initializeTdlibIfConfigured() {
+        if (client != null || !hasTelegramCredentials()) return;
+        try {
+            Client.setLogMessageHandler(1, (level, message) -> android.util.Log.d("VichGram-TDLib", message));
+            client = Client.create(this::onTdUpdate,
+                e -> runOnUiThread(() -> setStatus("Ошибка TDLib: " + e.getMessage())),
+                e -> runOnUiThread(() -> setStatus("Ошибка: " + e.getMessage())));
+            setStatus("Подключаем Telegram…");
+        } catch (Throwable e) {
+            client = null;
+            setStatus("Не удалось загрузить TDLib: " + e.getClass().getSimpleName());
+            toast("Ошибка загрузки TDLib: " + e.getMessage());
+        }
     }
 
     private void buildShell() {
@@ -345,9 +368,7 @@ public class MainActivity extends Activity {
     }
 
     private void startAuthorization() {
-        int configuredApiId = BuildConfig.TELEGRAM_API_ID;
-        String configuredApiHash = BuildConfig.TELEGRAM_API_HASH;
-        if (configuredApiId <= 0 || configuredApiHash == null || configuredApiHash.trim().isEmpty()) {
+        if (!hasTelegramCredentials()) {
             setStatus("Сборка не настроена для входа в Telegram");
             toast("Разработчику нужно один раз настроить VICHGRAM_TG_API_ID и VICHGRAM_TG_API_HASH в секретах GitHub. Пользователям эти данные вводить не придётся.");
             return;
@@ -361,23 +382,21 @@ public class MainActivity extends Activity {
         }
 
         pendingPhone = normalizedPhone;
+        initializeTdlibIfConfigured();
         if (client == null) {
-            try {
-                Client.setLogMessageHandler(1, (level, message) -> android.util.Log.d("VichGram-TDLib", message));
-                client = Client.create(this::onTdUpdate,
-                    e -> runOnUiThread(() -> setStatus("Ошибка TDLib: " + e.getMessage())),
-                    e -> runOnUiThread(() -> setStatus("Ошибка: " + e.getMessage())));
-                setStatus("Подключаем Telegram и готовим локальную базу…");
-            } catch (Throwable e) {
-                setStatus("Не удалось загрузить TDLib: " + e.getClass().getSimpleName());
-                toast("Ошибка загрузки TDLib: " + e.getMessage());
-            }
-        } else if (parametersSent) {
-            String numberToSend = pendingPhone;
             pendingPhone = "";
-            client.send(new TdApi.SetAuthenticationPhoneNumber(numberToSend, null), this::handleResponse);
-            setStatus("Запрашиваем код подтверждения…");
+            return;
         }
+        if (waitingForPhoneNumber) sendPendingPhone();
+    }
+
+    private void sendPendingPhone() {
+        if (client == null || pendingPhone == null || pendingPhone.isEmpty() || !waitingForPhoneNumber) return;
+        String phone = pendingPhone;
+        pendingPhone = "";
+        waitingForPhoneNumber = false;
+        client.send(new TdApi.SetAuthenticationPhoneNumber(phone, null), this::handleResponse);
+        runOnUiThread(() -> setStatus("Запрашиваем код подтверждения…"));
     }
 
     private String pendingPhone = "";
@@ -388,16 +407,20 @@ public class MainActivity extends Activity {
             if (state instanceof TdApi.AuthorizationStateWaitTdlibParameters) {
                 sendParameters();
             } else if (state instanceof TdApi.AuthorizationStateWaitPhoneNumber) {
-                if (pendingPhone == null || pendingPhone.isEmpty()) {
-                    runOnUiThread(() -> showPhoneEntry());
+                waitingForPhoneNumber = true;
+                if (pendingPhone != null && !pendingPhone.isEmpty()) {
+                    sendPendingPhone();
                 } else {
-                    runOnUiThread(() -> setStatus("Подготавливаем запрос кода подтверждения…"));
+                    runOnUiThread(() -> showPhoneEntry());
                 }
             } else if (state instanceof TdApi.AuthorizationStateWaitCode) {
+                waitingForPhoneNumber = false;
                 runOnUiThread(() -> showCodeEntry());
             } else if (state instanceof TdApi.AuthorizationStateWaitPassword) {
                 runOnUiThread(() -> showPasswordEntry());
             } else if (state instanceof TdApi.AuthorizationStateReady) {
+                waitingForPhoneNumber = false;
+                pendingPhone = "";
                 runOnUiThread(this::showChats);
                 client.send(new TdApi.GetChats(new TdApi.ChatListMain(), 100), this::handleResponse);
             } else if (state instanceof TdApi.AuthorizationStateWaitOtherDeviceConfirmation) {
@@ -461,8 +484,13 @@ public class MainActivity extends Activity {
         phoneField = field("Номер телефона с кодом страны", InputType.TYPE_CLASS_PHONE);
         button("Отправить код", () -> {
             String phone = phoneField.getText().toString().trim();
-            if (phone.isEmpty()) { toast("Введи номер телефона"); return; }
-            client.send(new TdApi.SetAuthenticationPhoneNumber(phone, null), this::handleResponse);
+            String normalizedPhone = phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "");
+            if (!normalizedPhone.matches("\\+?[0-9]{7,15}")) {
+                toast("Введи действительный номер с кодом страны");
+                return;
+            }
+            waitingForPhoneNumber = false;
+            client.send(new TdApi.SetAuthenticationPhoneNumber(normalizedPhone, null), this::handleResponse);
             setStatus("Запрашиваем код подтверждения…");
         });
         setStatus("Ожидается номер телефона");
@@ -502,14 +530,7 @@ public class MainActivity extends Activity {
                 toast(error.message);
             });
         } else if (object instanceof TdApi.Ok) {
-            if (parametersSent && !pendingPhone.isEmpty()) {
-                String phone = pendingPhone;
-                pendingPhone = "";
-                client.send(new TdApi.SetAuthenticationPhoneNumber(phone, null), this::handleResponse);
-                runOnUiThread(() -> setStatus("Запрашиваем код подтверждения…"));
-            } else {
-                runOnUiThread(() -> setStatus("Запрос принят"));
-            }
+            runOnUiThread(() -> setStatus("Запрос принят"));
         } else if (object instanceof TdApi.Chats) {
             long[] ids = ((TdApi.Chats) object).chatIds;
             for (long id : ids) client.send(new TdApi.GetChat(id), result -> {
@@ -609,10 +630,18 @@ public class MainActivity extends Activity {
             empty.setPadding(dp(6), dp(14), dp(6), dp(14));
             chatRows.addView(empty);
             if (chats.isEmpty()) {
-                button("Обновить список чатов", () -> {
+                Button refresh = new Button(this);
+                refresh.setText("Обновить список чатов");
+                refresh.setAllCaps(false);
+                refresh.setTextColor(BG);
+                refresh.setBackground(rounded(CYAN, 0));
+                refresh.setOnClickListener(v -> {
                     if (client != null) client.send(new TdApi.GetChats(new TdApi.ChatListMain(), 100), this::handleResponse);
                     setStatus("Обновляем список чатов…");
                 });
+                LinearLayout.LayoutParams refreshLp = new LinearLayout.LayoutParams(-1, dp(48));
+                refreshLp.topMargin = dp(8);
+                chatRows.addView(refresh, refreshLp);
             }
         }
     }
