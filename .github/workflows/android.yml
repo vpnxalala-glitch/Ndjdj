@@ -11,7 +11,7 @@ on:
 
 # New commits should supersede slow builds; TDLib is reused from the verified build artifact.
 concurrency:
-  group: vichgram-android-build-${{ github.ref }}
+  group: vichgram-android-artifact-build-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
