@@ -36,7 +36,6 @@ import java.net.URL;
 import org.drinkless.tdlib.Client;
 import org.drinkless.tdlib.TdApi;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -96,7 +95,10 @@ public class MainActivity extends Activity {
         brand.addView(title);
         brand.addView(subtitle);
         header.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView dot = text("●", 13, CYAN, true);
+        TextView dot = text("↻", 22, CYAN, true);
+        dot.setContentDescription("Проверить обновления");
+        dot.setPadding(dp(12), dp(4), dp(2), dp(4));
+        dot.setOnClickListener(v -> checkForUpdates());
         header.addView(dot);
         root.addView(header);
 
@@ -248,7 +250,7 @@ public class MainActivity extends Activity {
 
     private long parseReleaseVersionCode(String tag) {
         try {
-            String digits = tag.replaceAll("[^0-9]", "");
+            String digits = tag.replaceFirst("^.*\\\\.", "").replaceAll("[^0-9]", "");
             return Long.parseLong(digits);
         } catch (Exception e) {
             return -1;
