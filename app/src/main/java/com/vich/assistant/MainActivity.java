@@ -312,10 +312,6 @@ public class MainActivity extends Activity {
     }
 
     private void startAuthorization() {
-        if (client == null) {
-            toast("TDLib не загрузилась. Проверь сборку приложения.");
-            return;
-        }
         apiId = apiIdField.getText().toString().trim();
         apiHash = apiHashField.getText().toString().trim();
         String phone = phoneField.getText().toString().trim();
