@@ -13,6 +13,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -51,8 +53,9 @@ public class MainActivity extends Activity {
     private LinearLayout root;
     private LinearLayout content;
     private TextView status;
-    private EditText apiIdField, apiHashField, phoneField, codeField, passwordField;
-    private String apiId = "", apiHash = "";
+    private EditText phoneField, codeField, passwordField, chatSearchField;
+    private LinearLayout chatRows;
+    private String chatQuery = "";
     private boolean parametersSent;
     private TdApi.Chat selectedChat;
     private EditText messageField;
@@ -172,18 +175,48 @@ public class MainActivity extends Activity {
 
     private void showWelcome() {
         content.removeAllViews();
-        heading("Твой Telegram, по-новому", "Нативный интерфейс VichGram. Для входа нужны API credentials Telegram — они вводятся только на устройстве.");
-        apiIdField = field("API ID (число с my.telegram.org)", InputType.TYPE_CLASS_NUMBER);
-        apiHashField = field("API Hash", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        heading("VichGram", "Твой мессенджер в аккуратном неоновом оформлении. Введи номер телефона — дальше проведёт Telegram.");
         phoneField = field("Номер телефона с кодом страны", InputType.TYPE_CLASS_PHONE);
+        button("Получить код", this::startAuthorization);
         button("Проверить обновления", this::checkForUpdates);
-        button("Подключить Telegram", this::startAuthorization);
-        TextView note = text("API ID и API Hash можно получить на my.telegram.org. Не отправляй их в чат и не добавляй в публичный репозиторий.", 12, MUTED, false);
+
+        featureCard("01", "ЧАТЫ И СООБЩЕНИЯ", "Открывай диалоги, читай историю и отправляй текстовые сообщения.");
+        featureCard("02", "ПОИСК ПО ДИАЛОГАМ", "Быстро находи нужный чат по имени или последнему сообщению.");
+        featureCard("03", "ЗАЩИЩЁННЫЙ ВХОД", "Код приходит через Telegram или SMS. Пароль 2FA потребуется только если он включён в аккаунте.");
+
+        TextView note = text("Технические параметры приложения настраиваются при сборке и не запрашиваются у пользователей.", 12, MUTED, false);
         note.setLineSpacing(dp(3), 1f);
+        note.setPadding(0, dp(4), 0, dp(8));
         content.addView(note);
-        setStatus("Ожидание данных для подключения");
+        setStatus("Введи номер телефона");
     }
 
+    private void featureCard(String number, String title, String description) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(14), dp(12), dp(14), dp(12));
+        card.setBackground(rounded(PANEL, Color.rgb(38, 57, 82)));
+
+        TextView index = text(number, 15, CYAN, true);
+        index.setGravity(Gravity.CENTER);
+        card.addView(index, new LinearLayout.LayoutParams(dp(38), dp(38)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(12), 0, 0, 0);
+        copy.addView(text(title, 12, CYAN, true));
+        TextView body = text(description, 12, WHITE, false);
+        body.setLineSpacing(dp(2), 1f);
+        LinearLayout.LayoutParams bodyLp = new LinearLayout.LayoutParams(-1, -2);
+        bodyLp.topMargin = dp(4);
+        copy.addView(body, bodyLp);
+        card.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
+        cardLp.bottomMargin = dp(9);
+        content.addView(card, cardLp);
+    }
 
     private static final String RELEASES_API = "https://api.github.com/repos/vpnxalala-glitch/Ndjdj/releases?per_page=10";
 
@@ -312,31 +345,38 @@ public class MainActivity extends Activity {
     }
 
     private void startAuthorization() {
-        apiId = apiIdField.getText().toString().trim();
-        apiHash = apiHashField.getText().toString().trim();
-        String phone = phoneField.getText().toString().trim();
-        if (apiId.isEmpty() || apiHash.isEmpty() || phone.isEmpty()) {
-            toast("Заполни API ID, API Hash и номер телефона");
+        int configuredApiId = BuildConfig.TELEGRAM_API_ID;
+        String configuredApiHash = BuildConfig.TELEGRAM_API_HASH;
+        if (configuredApiId <= 0 || configuredApiHash == null || configuredApiHash.trim().isEmpty()) {
+            setStatus("Сборка не настроена для входа в Telegram");
+            toast("Разработчику нужно один раз настроить VICHGRAM_TG_API_ID и VICHGRAM_TG_API_HASH в секретах GitHub. Пользователям эти данные вводить не придётся.");
             return;
         }
-        try {
-            Integer.parseInt(apiId);
-        } catch (NumberFormatException e) {
-            toast("API ID должен быть числом");
+
+        String phone = phoneField == null ? "" : phoneField.getText().toString().trim();
+        String normalizedPhone = phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "");
+        if (!normalizedPhone.matches("\\+?[0-9]{7,15}")) {
+            toast("Введи действительный номер с кодом страны, например +491234567890");
             return;
         }
-        pendingPhone = phone;
+
+        pendingPhone = normalizedPhone;
         if (client == null) {
             try {
                 Client.setLogMessageHandler(1, (level, message) -> android.util.Log.d("VichGram-TDLib", message));
-                client = Client.create(this::onTdUpdate, e -> runOnUiThread(() -> setStatus("Ошибка TDLib: " + e.getMessage())), e -> runOnUiThread(() -> setStatus("Ошибка: " + e.getMessage())));
-                setStatus("Подключаем TDLib и готовим базу…");
+                client = Client.create(this::onTdUpdate,
+                    e -> runOnUiThread(() -> setStatus("Ошибка TDLib: " + e.getMessage())),
+                    e -> runOnUiThread(() -> setStatus("Ошибка: " + e.getMessage())));
+                setStatus("Подключаем Telegram и готовим локальную базу…");
             } catch (Throwable e) {
                 setStatus("Не удалось загрузить TDLib: " + e.getClass().getSimpleName());
                 toast("Ошибка загрузки TDLib: " + e.getMessage());
             }
         } else if (parametersSent) {
-            client.send(new TdApi.SetAuthenticationPhoneNumber(phone, null), this::handleResponse);
+            String numberToSend = pendingPhone;
+            pendingPhone = "";
+            client.send(new TdApi.SetAuthenticationPhoneNumber(numberToSend, null), this::handleResponse);
+            setStatus("Запрашиваем код подтверждения…");
         }
     }
 
@@ -348,7 +388,11 @@ public class MainActivity extends Activity {
             if (state instanceof TdApi.AuthorizationStateWaitTdlibParameters) {
                 sendParameters();
             } else if (state instanceof TdApi.AuthorizationStateWaitPhoneNumber) {
-                runOnUiThread(() -> showPhoneEntry());
+                if (pendingPhone == null || pendingPhone.isEmpty()) {
+                    runOnUiThread(() -> showPhoneEntry());
+                } else {
+                    runOnUiThread(() -> setStatus("Подготавливаем запрос кода подтверждения…"));
+                }
             } else if (state instanceof TdApi.AuthorizationStateWaitCode) {
                 runOnUiThread(() -> showCodeEntry());
             } else if (state instanceof TdApi.AuthorizationStateWaitPassword) {
@@ -378,7 +422,7 @@ public class MainActivity extends Activity {
         } else if (update instanceof TdApi.UpdateNewMessage) {
             TdApi.Message message = ((TdApi.UpdateNewMessage) update).message;
             if (selectedChat != null && selectedChat.id == message.chatId) {
-                synchronized (messages) { messages.add(0, message); }
+                synchronized (messages) { messages.add(message); }
                 runOnUiThread(this::renderMessages);
             }
         }
@@ -395,8 +439,11 @@ public class MainActivity extends Activity {
             p.useChatInfoDatabase = true;
             p.useMessageDatabase = true;
             p.useSecretChats = false;
-            p.apiId = Integer.parseInt(apiId);
-            p.apiHash = apiHash;
+            if (BuildConfig.TELEGRAM_API_ID <= 0 || BuildConfig.TELEGRAM_API_HASH == null || BuildConfig.TELEGRAM_API_HASH.trim().isEmpty()) {
+                throw new IllegalStateException("Telegram API credentials are not configured in this build");
+            }
+            p.apiId = BuildConfig.TELEGRAM_API_ID;
+            p.apiHash = BuildConfig.TELEGRAM_API_HASH;
             p.systemLanguageCode = Locale.getDefault().getLanguage();
             p.deviceModel = android.os.Build.MODEL;
             p.systemVersion = android.os.Build.VERSION.RELEASE;
@@ -485,26 +532,87 @@ public class MainActivity extends Activity {
 
     private void showChats() {
         content.removeAllViews();
-        heading("Сообщения", "Синхронизация чатов через TDLib.");
+        chatSearchField = null;
+        chatRows = null;
+        chatQuery = "";
         renderChats();
         setStatus("Telegram подключён");
     }
 
     private void renderChats() {
         if (content == null || isFinishing() || selectedChat != null) return;
-        content.removeAllViews();
-        heading("Сообщения", chats.isEmpty() ? "Ожидаем синхронизацию диалогов…" : "Выбери диалог, чтобы открыть историю.");
+        if (chatSearchField == null || chatRows == null) {
+            content.removeAllViews();
+            heading("Твои чаты", "Поиск по имени диалога или последнему сообщению.");
+
+            chatSearchField = new EditText(this);
+            chatSearchField.setSingleLine(true);
+            chatSearchField.setTextSize(14);
+            chatSearchField.setTextColor(WHITE);
+            chatSearchField.setHintTextColor(MUTED);
+            chatSearchField.setHint("⌕  Поиск по чатам");
+            chatSearchField.setInputType(InputType.TYPE_CLASS_TEXT);
+            chatSearchField.setPadding(dp(14), dp(8), dp(14), dp(8));
+            chatSearchField.setBackground(rounded(Color.rgb(23, 34, 55), Color.rgb(44, 63, 91)));
+            LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, dp(50));
+            searchLp.bottomMargin = dp(12);
+            content.addView(chatSearchField, searchLp);
+
+            chatRows = new LinearLayout(this);
+            chatRows.setOrientation(LinearLayout.VERTICAL);
+            content.addView(chatRows, new LinearLayout.LayoutParams(-1, -2));
+
+            chatSearchField.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
+                @Override public void afterTextChanged(Editable s) {
+                    chatQuery = s == null ? "" : s.toString().trim().toLowerCase(Locale.ROOT);
+                    renderChatRows();
+                }
+            });
+        }
+        renderChatRows();
+    }
+
+    private void renderChatRows() {
+        if (chatRows == null) return;
+        chatRows.removeAllViews();
+        int shown = 0;
         synchronized (chats) {
             for (int i = 0; i < chats.size(); i++) {
                 final TdApi.Chat chat = chats.get(i);
-                String label = chat.title == null || chat.title.isEmpty() ? "Диалог" : chat.title;
-                TextView row = text(label + "\\n" + (chat.lastMessage == null ? "Открыть диалог" : messagePreview(chat.lastMessage)), 15, WHITE, true);
+                String label = chat.title == null || chat.title.trim().isEmpty() ? "Диалог" : chat.title;
+                String preview = chat.lastMessage == null ? "Открыть диалог" : messagePreview(chat.lastMessage);
+                if (!chatQuery.isEmpty()
+                    && !label.toLowerCase(Locale.ROOT).contains(chatQuery)
+                    && !preview.toLowerCase(Locale.ROOT).contains(chatQuery)) {
+                    continue;
+                }
+                String unread = chat.unreadCount > 0 ? chat.unreadCount + " новых · " : "";
+                TextView row = text(label + "\n" + unread + preview, 15, WHITE, true);
+                row.setMaxLines(3);
                 row.setPadding(dp(15), dp(14), dp(15), dp(14));
                 row.setBackground(rounded(PANEL, Color.rgb(34, 51, 76)));
                 row.setOnClickListener(v -> openChat(chat));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
                 lp.bottomMargin = dp(9);
-                content.addView(row, lp);
+                chatRows.addView(row, lp);
+                shown++;
+            }
+        }
+        if (shown == 0) {
+            String message = chats.isEmpty()
+                ? "Пока нет загруженных диалогов. Проверь соединение и обнови список."
+                : "По этому запросу ничего не найдено.";
+            TextView empty = text(message, 13, MUTED, false);
+            empty.setLineSpacing(dp(3), 1f);
+            empty.setPadding(dp(6), dp(14), dp(6), dp(14));
+            chatRows.addView(empty);
+            if (chats.isEmpty()) {
+                button("Обновить список чатов", () -> {
+                    if (client != null) client.send(new TdApi.GetChats(new TdApi.ChatListMain(), 100), this::handleResponse);
+                    setStatus("Обновляем список чатов…");
+                });
             }
         }
     }
@@ -541,15 +649,18 @@ public class MainActivity extends Activity {
         back.setOnClickListener(v -> {
             selectedChat = null;
             messageField = null;
+            chatSearchField = null;
+            chatRows = null;
             showChats();
         });
         content.addView(back);
         heading(selectedChat.title == null ? "Диалог" : selectedChat.title, "История и отправка сообщений через TDLib.");
         synchronized (messages) {
             for (TdApi.Message m : messages) {
-                TextView bubble = text((m.isOutgoing ? "Вы" : "Сообщение") + "\\n" + messagePreview(m), 14, WHITE, false);
+                TextView bubble = text((m.isOutgoing ? "Вы" : "Сообщение") + "\n" + messagePreview(m), 14, WHITE, false);
                 bubble.setPadding(dp(13), dp(10), dp(13), dp(10));
                 bubble.setBackground(rounded(m.isOutgoing ? Color.rgb(24, 69, 79) : PANEL, 0));
+                bubble.setGravity(m.isOutgoing ? Gravity.END : Gravity.START);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
                 lp.bottomMargin = dp(7);
                 content.addView(bubble, lp);
