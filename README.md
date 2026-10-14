@@ -1,21 +1,26 @@
 # VichGram
 
-VichGram is an Android project with a neon cyberpunk interface and a floating assistant/browser window. The current build includes an embedded Telegram Web entry point inside the floating window. This is a web client, not a native TDLib implementation; native Telegram API integration, background update handling, and full multi-account management remain future work.
+VichGram — Android-мессенджер на официальной TDLib с тёмной неоновой темой. В проекте нет плавающего пузыря: приложение открывается как обычный экран мессенджера.
 
-## Current features
-- Floating overlay window with adjustable width, height, and bubble size
-- Embedded browser, web-based AI entry point, and Telegram Web in a floating window
-- App launcher and text/voice commands
-- Quick links to Android settings
-- Phone-number format hints and links to public search services
-- Neon-inspired icon and rounded UI cards
+## Функции
+- Вход по номеру телефона и коду подтверждения Telegram.
+- Поддержка дополнительного пароля двухэтапной проверки, если он включён в аккаунте.
+- Список диалогов, поиск по имени и последнему сообщению.
+- Загрузка истории чата и отправка текстовых сообщений.
+- Проверка обновлений и загрузка APK из GitHub Releases.
+- Закруглённые карточки, поля ввода и кнопки в едином тёмном оформлении.
 
-## Build
-GitHub Actions builds the debug APK on pushes to `main` and publishes a prerelease when the build succeeds. Download the latest APK from the repository Releases page.
+## Telegram API credentials для сборки
 
-## Planned
-- Telegram client using TDLib and the official Telegram API
-- Multi-account support, chat folders, privacy options, and local AI utilities
-- Expanded neon theme and settings
+Пользователи не должны вводить API ID или API Hash. Разработчик должен один раз добавить в **Settings → Secrets and variables → Actions** репозитория следующие Actions secrets:
 
-A Telegram `api_id` and `api_hash` are required for the client integration. Keep credentials out of source control and public logs.
+- `VICHGRAM_TG_API_ID` — числовой API ID приложения из `my.telegram.org`.
+- `VICHGRAM_TG_API_HASH` — API Hash этого же приложения.
+
+Workflow передаёт значения в Gradle при сборке; они не хранятся в исходном коде и не выводятся в логи. Пока секреты не настроены, APK соберётся, но вход в новый аккаунт будет отключён с понятным сообщением. Не используй чужие API credentials.
+
+## Сборка
+
+GitHub Actions скачивает проверенный пакет TDLib, собирает debug APK и прикладывает его к prerelease. Последний APK находится на странице [Releases](https://github.com/vpnxalala-glitch/Ndjdj/releases).
+
+Для тестирования нужно использовать Android 8.0+ (API 26+). Все действия авторизации и проверки кода выполняются официальной библиотекой TDLib.
