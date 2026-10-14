@@ -92,17 +92,25 @@ jobs:
           path: ~/.android/debug.keystore
           key: vichgram-debug-signing-key-v1
 
-      - name: Build APK with TDLib
+      - name: Check login configuration
+        id: api_credentials
         env:
           VICHGRAM_TG_API_ID: ${{ secrets.VICHGRAM_TG_API_ID }}
           VICHGRAM_TG_API_HASH: ${{ secrets.VICHGRAM_TG_API_HASH }}
         run: |
           if [ -z "$VICHGRAM_TG_API_ID" ] || [ -z "$VICHGRAM_TG_API_HASH" ]; then
-            echo "::warning::Telegram API secrets are not configured. The APK will build, but new-user login will remain disabled until VICHGRAM_TG_API_ID and VICHGRAM_TG_API_HASH are configured."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::API credentials are missing. Build artifact will be available for diagnostics, but a release that appears ready for login will not be published."
           else
-            echo "Telegram app credentials are configured."
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "VichGram login credentials are configured."
           fi
-          gradle --no-daemon --stacktrace --warning-mode all assembleDebug
+
+      - name: Build APK with TDLib
+        env:
+          VICHGRAM_TG_API_ID: ${{ secrets.VICHGRAM_TG_API_ID }}
+          VICHGRAM_TG_API_HASH: ${{ secrets.VICHGRAM_TG_API_HASH }}
+        run: gradle --no-daemon --stacktrace --warning-mode all assembleDebug
 
       - name: Verify APK
         run: |
@@ -123,7 +131,7 @@ jobs:
           retention-days: 14
 
       - name: Publish release
-        if: success() && github.event_name != 'pull_request'
+        if: success() && github.event_name != 'pull_request' && steps.api_credentials.outputs.configured == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: vichgram-0.3.${{ github.run_number }}
