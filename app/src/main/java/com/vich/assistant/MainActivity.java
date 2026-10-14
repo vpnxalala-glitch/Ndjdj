@@ -57,12 +57,6 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
         buildShell();
         showWelcome();
-        try {
-            client = Client.create(this::onTdUpdate, e -> runOnUiThread(() -> setStatus("Ошибка TDLib: " + e.getMessage())), e -> runOnUiThread(() -> setStatus("Ошибка: " + e.getMessage())));
-            Client.setLogMessageHandler(1, (level, message) -> android.util.Log.d("VichGram-TDLib", message));
-        } catch (Throwable e) {
-            setStatus("Не удалось загрузить TDLib: " + e.getClass().getSimpleName());
-        }
     }
 
     private void buildShell() {
@@ -163,7 +157,7 @@ public class MainActivity extends Activity {
         TextView note = text("API ID и API Hash можно получить на my.telegram.org. Не отправляй их в чат и не добавляй в публичный репозиторий.", 12, MUTED, false);
         note.setLineSpacing(dp(3), 1f);
         content.addView(note);
-        setStatus(client == null ? "Ожидание подключения TDLib…" : "Готов к авторизации");
+        setStatus("Ожидание данных для подключения");
     }
 
     private void startAuthorization() {
@@ -184,11 +178,18 @@ public class MainActivity extends Activity {
             toast("API ID должен быть числом");
             return;
         }
-        if (parametersSent) {
+        pendingPhone = phone;
+        if (client == null) {
+            try {
+                Client.setLogMessageHandler(1, (level, message) -> android.util.Log.d("VichGram-TDLib", message));
+                client = Client.create(this::onTdUpdate, e -> runOnUiThread(() -> setStatus("Ошибка TDLib: " + e.getMessage())), e -> runOnUiThread(() -> setStatus("Ошибка: " + e.getMessage())));
+                setStatus("Подключаем TDLib и готовим базу…");
+            } catch (Throwable e) {
+                setStatus("Не удалось загрузить TDLib: " + e.getClass().getSimpleName());
+                toast("Ошибка загрузки TDLib: " + e.getMessage());
+            }
+        } else if (parametersSent) {
             client.send(new TdApi.SetAuthenticationPhoneNumber(phone, null), this::handleResponse);
-        } else {
-            pendingPhone = phone;
-            setStatus("Настройка защищённой базы Telegram…");
         }
     }
 
@@ -207,7 +208,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> showPasswordEntry());
             } else if (state instanceof TdApi.AuthorizationStateReady) {
                 runOnUiThread(this::showChats);
-                client.send(new TdApi.LoadChats(new TdApi.ChatListMain(), 100), this::handleResponse);
+                client.send(new TdApi.GetChats(new TdApi.ChatListMain(), 100), this::handleResponse);
             } else if (state instanceof TdApi.AuthorizationStateWaitOtherDeviceConfirmation) {
                 runOnUiThread(() -> setStatus("Подтверди вход по ссылке, показанной Telegram."));
             } else if (state instanceof TdApi.AuthorizationStateClosed) {
