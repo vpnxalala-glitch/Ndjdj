@@ -43,6 +43,8 @@ import org.drinkless.tdlib.Client;
 import org.drinkless.tdlib.TdApi;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -79,7 +81,7 @@ public class MainActivity extends Activity {
     private GradientDrawable rounded(int color, int stroke) {
         GradientDrawable d = new GradientDrawable();
         d.setColor(color);
-        d.setCornerRadius(dp(16));
+        d.setCornerRadius(dp(24));
         if (stroke != 0) d.setStroke(dp(1), stroke);
         return d;
     }
@@ -126,14 +128,12 @@ public class MainActivity extends Activity {
         LinearLayout brand = new LinearLayout(this);
         brand.setOrientation(LinearLayout.VERTICAL);
         TextView title = text("VichGram", 23, WHITE, true);
-        TextView subtitle = text("PRIVATE MESSENGER  /  TDLib", 10, CYAN, true);
         brand.addView(title);
-        brand.addView(subtitle);
         header.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
         TextView settings = text("⚙", 22, CYAN, true);
         settings.setContentDescription("Настройки оформления");
         settings.setPadding(dp(12), dp(4), dp(8), dp(4));
-        settings.setOnClickListener(v -> openAppearanceSettings());
+        settings.setOnClickListener(v -> openMainSettings());
         header.addView(settings);
         TextView dot = text("↻", 22, CYAN, true);
         dot.setContentDescription("Проверить обновления");
@@ -142,9 +142,7 @@ public class MainActivity extends Activity {
         header.addView(dot);
         root.addView(header);
 
-        status = text("Подготовка Telegram-клиента…", 12, MUTED, false);
-        status.setPadding(dp(18), dp(10), dp(18), dp(10));
-        root.addView(status);
+        status = text("", 12, MUTED, false);
 
         scrollView = new ScrollView(this);
         content = new LinearLayout(this);
@@ -155,10 +153,6 @@ public class MainActivity extends Activity {
         root.addView(scrollView, new LinearLayout.LayoutParams(-1, 0, 1));
         applyWallpaper();
 
-        TextView footer = text("VichGram • Telegram через официальный TDLib", 10, MUTED, false);
-        footer.setGravity(Gravity.CENTER);
-        footer.setPadding(dp(8), dp(10), dp(8), dp(10));
-        root.addView(footer);
         setContentView(root);
     }
 
@@ -579,8 +573,6 @@ public class MainActivity extends Activity {
         if (content == null || isFinishing() || selectedChat != null) return;
         if (chatSearchField == null || chatRows == null) {
             content.removeAllViews();
-            heading("Твои чаты", "Поиск по имени диалога или последнему сообщению.");
-
             chatSearchField = new EditText(this);
             chatSearchField.setSingleLine(true);
             chatSearchField.setTextSize(14);
@@ -624,8 +616,14 @@ public class MainActivity extends Activity {
         chatRows.removeAllViews();
         int shown = 0;
         synchronized (chats) {
-            for (int i = 0; i < chats.size(); i++) {
-                final TdApi.Chat chat = chats.get(i);
+            List<TdApi.Chat> sortedChats = new ArrayList<>(chats);
+            Collections.sort(sortedChats, (a, b) -> {
+                int da = a.lastMessage == null ? 0 : a.lastMessage.date;
+                int db = b.lastMessage == null ? 0 : b.lastMessage.date;
+                return Integer.compare(db, da);
+            });
+            for (int i = 0; i < sortedChats.size(); i++) {
+                final TdApi.Chat chat = sortedChats.get(i);
                 String label = chat.title == null || chat.title.trim().isEmpty() ? "Диалог" : chat.title;
                 String preview = chat.lastMessage == null ? "Открыть диалог" : messagePreview(chat.lastMessage);
                 if (!chatQuery.isEmpty()
@@ -697,7 +695,7 @@ public class MainActivity extends Activity {
     private void renderMessages() {
         if (selectedChat == null || content == null) return;
         content.removeAllViews();
-        TextView back = text("‹  Все чаты", 15, CYAN, true);
+        TextView back = text("Все чаты", 15, CYAN, true);
         back.setPadding(0, dp(8), 0, dp(12));
         back.setOnClickListener(v -> {
             selectedChat = null;
@@ -707,7 +705,9 @@ public class MainActivity extends Activity {
             showChats();
         });
         content.addView(back);
-        heading(selectedChat.title == null ? "Диалог" : selectedChat.title, "История и отправка сообщений через TDLib.");
+        TextView chatTitle = text(selectedChat.title == null ? "Диалог" : selectedChat.title, 21, WHITE, true);
+        chatTitle.setPadding(0, dp(6), 0, dp(14));
+        content.addView(chatTitle);
         synchronized (messages) {
             for (TdApi.Message m : messages) {
                 TextView bubble = text((m.isOutgoing ? "Вы" : "Сообщение") + "\n" + messagePreview(m), 14, WHITE, false);
@@ -733,8 +733,9 @@ public class MainActivity extends Activity {
         Button send = new Button(this);
         send.setText("➤");
         send.setAllCaps(false);
-        send.setTextColor(BG);
-        send.setBackground(rounded(CYAN, 0));
+        send.setTextColor(CYAN);
+        send.setTextSize(20);
+        send.setBackground(rounded(PANEL, CYAN));
         LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(dp(54), dp(50));
         sendLp.leftMargin = dp(8);
         composer.addView(send, sendLp);
@@ -763,6 +764,76 @@ public class MainActivity extends Activity {
         if (message.content instanceof TdApi.MessageVideo) return "▶ Видео";
         if (message.content instanceof TdApi.MessageDocument) return "📎 Файл";
         return "Сообщение";
+    }
+
+    private void openMainSettings() {
+        String[] items = {
+            "Аккаунты",
+            "VichGram меню",
+            "Оформление и обои",
+            "Конфиденциальность",
+            "Уведомления и звуки",
+            "Папки чатов",
+            "Telegram Premium",
+            "Telegram Stars",
+            "Данные и память"
+        };
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("Настройки")
+            .setItems(items, (dialog, which) -> {
+                switch (which) {
+                    case 0:
+                        showSettingsInfo("Аккаунты", "Управление текущим аккаунтом Telegram. Поддержка нескольких аккаунтов требует отдельного подключения и пока не реализована.");
+                        break;
+                    case 1:
+                        showVichGramMenu();
+                        break;
+                    case 2:
+                        openAppearanceSettings();
+                        break;
+                    case 3:
+                        showSettingsInfo("Конфиденциальность", "Настройки конфиденциальности Telegram доступны через официальный клиент. Собственные переключатели VichGram здесь ещё не подключены.");
+                        break;
+                    case 4:
+                        showSettingsInfo("Уведомления и звуки", "Панель уведомлений VichGram будет подключена отдельным этапом.");
+                        break;
+                    case 5:
+                        showSettingsInfo("Папки чатов", "Чаты сейчас показаны единым списком по времени последнего сообщения — без разделения на чаты, группы и каналы.");
+                        break;
+                    case 6:
+                        showSettingsInfo("Telegram Premium", "Статус Premium определяется вашим аккаунтом Telegram. Покупка подписки из VichGram пока не реализована.");
+                        break;
+                    case 7:
+                        showSettingsInfo("Telegram Stars", "Баланс и операции со Stars пока не подключены в VichGram.");
+                        break;
+                    case 8:
+                        showSettingsInfo("Данные и память", "Очистка кэша и управление хранилищем пока не подключены.");
+                        break;
+                }
+            })
+            .setNegativeButton("Закрыть", null)
+            .show();
+    }
+
+    private void showVichGramMenu() {
+        String[] items = {"Стеклянные чаты", "Обои чатов", "Убрать обои"};
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("VichGram меню")
+            .setItems(items, (dialog, which) -> {
+                if (which == 0) openAppearanceSettings();
+                else if (which == 1) pickWallpaper();
+                else clearChatWallpaper();
+            })
+            .setNegativeButton("Назад", (dialog, which) -> openMainSettings())
+            .show();
+    }
+
+    private void showSettingsInfo(String title, String message) {
+        new android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Понятно", null)
+            .show();
     }
 
     private void openAppearanceSettings() {
